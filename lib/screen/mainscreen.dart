@@ -6,7 +6,7 @@ import 'task.dart';
 import 'users.dart';
 
 class MainScreen extends StatefulWidget {
-  const MainScreen({Key? key}) : super(key: key);
+  const MainScreen({super.key});
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -29,7 +29,7 @@ class _MainScreenState extends State<MainScreen> {
         backgroundColor: const Color(0xFF0099FF),
         elevation: 0,
         title: const Text(
-          'My App',
+          'Claim Survey',
           style: TextStyle(
             color: Colors.white,
             fontSize: 22,

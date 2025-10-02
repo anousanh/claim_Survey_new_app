@@ -1,7 +1,8 @@
+import 'package:claim_survey_app/screen/task/TaskDetailScreen.dart';
 import 'package:flutter/material.dart';
 
 class TasksScreen extends StatelessWidget {
-  const TasksScreen({Key? key}) : super(key: key);
+  const TasksScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -9,7 +10,7 @@ class TasksScreen extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         const Text(
-          'My Tasks',
+          'ໜ້າວຽກ',
           style: TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.bold,
@@ -17,37 +18,16 @@ class TasksScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
-        _buildTaskCard(
-          'Complete project documentation',
-          'Due today',
-          Colors.orange,
-          true,
-        ),
-        _buildTaskCard(
-          'Review pull requests',
-          'Due tomorrow',
-          Colors.blue,
-          false,
-        ),
-        _buildTaskCard(
-          'Team meeting preparation',
-          'Due in 3 days',
-          Colors.green,
-          false,
-        ),
-        _buildTaskCard(
-          'Update user interface',
-          'Due next week',
-          Colors.purple,
-          false,
-        ),
+        _buildTaskCard(context, 'ແກ້ໄຂອຸບັດຕິເຫດ', Colors.orange, true),
+        _buildTaskCard(context, 'ແກ້ໄຂຄະດີເພີມເຕີ່ມ', Colors.blue, false),
+        _buildTaskCard(context, 'ຄະດີໃໝ່', Colors.green, false),
       ],
     );
   }
 
   Widget _buildTaskCard(
+    BuildContext context,
     String title,
-    String subtitle,
     Color color,
     bool isUrgent,
   ) {
@@ -82,13 +62,6 @@ class TasksScreen extends StatelessWidget {
           title,
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
         ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            subtitle,
-            style: TextStyle(color: Colors.grey[600], fontSize: 13),
-          ),
-        ),
         trailing: isUrgent
             ? Container(
                 padding: const EdgeInsets.symmetric(
@@ -108,7 +81,23 @@ class TasksScreen extends StatelessWidget {
                   ),
                 ),
               )
-            : null,
+            : const Icon(Icons.arrow_forward_ios, size: 16),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => TaskDetailScreen(
+                taskTitle: title,
+                assignedLat:
+                    17.9659061, // Replace with actual coordinates from your database
+                assignedLng:
+                    102.6135339, // Replace with actual coordinates from your database
+                taskId:
+                    'TASK001', // Replace with actual task ID from your database
+              ),
+            ),
+          );
+        },
       ),
     );
   }
