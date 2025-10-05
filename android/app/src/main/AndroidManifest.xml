@@ -1,15 +1,40 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="com.example.claim_survey_app">
 
-    <!-- Permissions go here -->
+    <!-- Location permissions -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    
+    <!-- Background location permission (Android 10+) -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    
+    <!-- Internet permission -->
     <uses-permission android:name="android.permission.INTERNET" />
+    
+    <!-- Foreground service permissions (Android 8.0+) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
         android:label="claim_survey_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+
+        <!-- Google Maps API Key -->
+        <meta-data 
+            android:name="com.google.android.geo.API_KEY" 
+            android:value="AIzaSyAb6DE0lT_HRUPvan8fcsH_lwUKUfEeXDw" />
+
+        <!-- Background Location Service -->
+        <service
+            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:foregroundServiceType="location"
+            android:exported="true"
+            android:stopWithTask="false"
+            tools:replace="android:exported" />
         
         <activity
             android:name=".MainActivity"
@@ -24,8 +49,6 @@
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
-
-            <meta-data android:name="com.google.android.geo.API_KEY" android:value="AIzaSyAb6DE0lT_HRUPvan8fcsH_lwUKUfEeXDw" />
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

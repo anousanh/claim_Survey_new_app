@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
+// Import the background service
+import 'package:claim_survey_app/services/background_location_service.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final String taskTitle;
@@ -42,6 +44,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   final Set<Polyline> _polylines = {};
   BitmapDescriptor? _driverIcon;
   StreamSubscription<Position>? _positionStreamSubscription;
+  StreamSubscription? _backgroundLocationSubscription; // For background updates
   List<Map<String, dynamic>> _steps = [];
   int _currentStepIndex = 0;
 
@@ -55,6 +58,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   @override
   void dispose() {
     _positionStreamSubscription?.cancel();
+    _backgroundLocationSubscription?.cancel();
     _mapController?.dispose();
     super.dispose();
   }
@@ -346,7 +350,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     _mapController!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
   }
 
-  void _startNavigation() {
+  // UPDATED METHOD - Start navigation with background service
+  void _startNavigation() async {
     if (_currentPosition == null) return;
 
     setState(() {
@@ -354,21 +359,48 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       _statusMessage = 'ກຳລັງນຳທາງ...';
     });
 
-    _positionStreamSubscription =
-        Geolocator.getPositionStream(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 10,
-          ),
-        ).listen((Position position) {
-          _updateNavigationWithNewPosition(position);
+    // Start background location service
+    await BackgroundLocationService.startTracking(
+      taskId: widget.taskId,
+      taskTitle: widget.taskTitle,
+    );
+
+    // Listen to location updates from background service
+    _backgroundLocationSubscription = BackgroundLocationService.service
+        .on('update')
+        .listen((event) {
+          if (event != null && mounted) {
+            final data = event;
+
+            Position newPosition = Position(
+              latitude: data['latitude'],
+              longitude: data['longitude'],
+              timestamp: DateTime.parse(data['timestamp']),
+              accuracy: 0,
+              altitude: 0,
+              heading: data['heading'] ?? 0,
+              speed: data['speed'] ?? 0,
+              speedAccuracy: 0,
+              altitudeAccuracy: 0,
+              headingAccuracy: 0,
+            );
+
+            _updateNavigationWithNewPosition(newPosition);
+          }
         });
 
     _updateCurrentInstruction();
   }
 
-  void _stopNavigation() {
-    _positionStreamSubscription?.cancel();
+  // UPDATED METHOD - Stop navigation and background service
+  void _stopNavigation() async {
+    // Stop background service
+    await BackgroundLocationService.stopTracking();
+
+    // Cancel subscription
+    _backgroundLocationSubscription?.cancel();
+    _backgroundLocationSubscription = null;
+
     setState(() {
       _isNavigating = false;
       _statusMessage = 'ຢຸດການນຳທາງ';
@@ -489,7 +521,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     if (mounted) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('ຍອມຮັບຄະດີສຳເລັດແລ້ວ!')));
+      ).showSnackBar(const SnackBar(content: Text('ຮັບຄະດີສຳເລັດແລ້ວ!')));
     }
   }
 

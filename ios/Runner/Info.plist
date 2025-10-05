@@ -16,10 +16,20 @@
 	<string>claim_survey_app</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-    <string>This app needs access to location to track adjuster work.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>ແອັບນີ້ຕ້ອງການສະຖານທີ່ເພື່ອສະແດງຕຳແໜ່ງຂອງທ່ານເທິງແຜນທີ່</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>This app needs access to location to track adjuster work.</string>
+    <string>ແອັບນີ້ຕ້ອງການສະຖານທີ່ຕະຫຼອດເວລາເພື່ອຕິດຕາມການເດີນທາງຂອງທ່ານ ແລະ ແຈ້ງເຕືອນລູກຄ້າເມື່ອທ່ານຢູ່ໃກ້ໆ</string>
+    <key>NSLocationAlwaysUsageDescription</key>
+    <string>ແອັບນີ້ຕ້ອງການສະຖານທີ່ຕະຫຼອດເວລາເພື່ອຕິດຕາມການເດີນທາງຂອງທ່ານ</string>
+
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>location</string>
+        <string>fetch</string>
+        <string>processing</string>
+    </array>
+
 	<key>CFBundleShortVersionString</key>
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
