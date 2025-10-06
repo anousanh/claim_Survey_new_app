@@ -110,19 +110,19 @@ class _MainScreenState extends State<MainScreen> {
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.task_alt_rounded, size: 26),
-              label: 'Tasks',
+              label: 'ແກ້ໄຂອຸບັດຕິເຫດ',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.history_rounded, size: 26),
-              label: 'History',
+              label: 'ແກ້ໄຂຄະດີເພີມເຕີ່ມ',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.settings_rounded, size: 26),
-              label: 'Preferences',
+              icon: Icon(Icons.monetization_on_rounded, size: 26),
+              label: 'ລາຍງານ',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.people_rounded, size: 26),
-              label: 'Users',
+              icon: Icon(Icons.settings, size: 26),
+              label: 'ຂໍ້ມູນຜູ້ໃຊ້',
             ),
           ],
         ),

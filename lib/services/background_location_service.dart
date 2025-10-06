@@ -1,19 +1,26 @@
+// lib/services/background_location_service.dart
 import 'dart:async';
-import 'dart:ui';
 import 'dart:convert';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
-
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Background service for continuous location tracking
 class BackgroundLocationService {
   static final FlutterBackgroundService _service = FlutterBackgroundService();
+  static final FlutterLocalNotificationsPlugin _notificationsPlugin =
+      FlutterLocalNotificationsPlugin();
 
   /// Initialize background service - Call this in main()
   static Future<void> initializeService() async {
+    // Initialize notifications
+    await _initializeNotifications();
+
     await _service.configure(
       androidConfiguration: AndroidConfiguration(
         onStart: onStart,
@@ -23,6 +30,7 @@ class BackgroundLocationService {
         initialNotificationTitle: 'Location Tracking',
         initialNotificationContent: 'ກຳລັງຕິດຕາມຕຳແໜ່ງຂອງທ່ານ...',
         foregroundServiceNotificationId: 888,
+        foregroundServiceTypes: [AndroidForegroundType.location],
       ),
       iosConfiguration: IosConfiguration(
         autoStart: false,
@@ -30,6 +38,43 @@ class BackgroundLocationService {
         onBackground: onIosBackground,
       ),
     );
+  }
+
+  /// Initialize notification channels
+  static Future<void> _initializeNotifications() async {
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const DarwinInitializationSettings initializationSettingsDarwin =
+        DarwinInitializationSettings(
+          requestAlertPermission: true,
+          requestBadgePermission: true,
+          requestSoundPermission: true,
+        );
+
+    const InitializationSettings initializationSettings =
+        InitializationSettings(
+          android: initializationSettingsAndroid,
+          iOS: initializationSettingsDarwin,
+        );
+
+    await _notificationsPlugin.initialize(initializationSettings);
+
+    // Create notification channel for Android
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'location_tracking_channel',
+      'Location Tracking',
+      description: 'This channel is used for location tracking notifications',
+      importance: Importance.low,
+      enableVibration: false,
+      playSound: false,
+    );
+
+    await _notificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(channel);
   }
 
   /// Start tracking service
@@ -77,6 +122,7 @@ class BackgroundLocationService {
   static void onStart(ServiceInstance service) async {
     DartPluginRegistrant.ensureInitialized();
 
+    // For Android, set up foreground notification
     if (service is AndroidServiceInstance) {
       service.on('setAsForeground').listen((event) {
         service.setAsForegroundService();
@@ -85,6 +131,9 @@ class BackgroundLocationService {
       service.on('setAsBackground').listen((event) {
         service.setAsBackgroundService();
       });
+
+      // Set as foreground immediately
+      service.setAsForegroundService();
     }
 
     service.on('stopService').listen((event) {
@@ -179,12 +228,12 @@ class BackgroundLocationService {
       );
 
       if (response.statusCode == 200) {
-        debugPrint('✅ Location sent successfully');
+        debugPrint('Location sent successfully');
       } else {
-        debugPrint('❌ Failed to send location: ${response.statusCode}');
+        debugPrint('Failed to send location: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('❌ Error sending location: $e');
+      debugPrint('Error sending location: $e');
       // You can store location offline here if server is unreachable
     }
   }

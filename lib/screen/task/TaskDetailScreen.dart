@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 
+// Import the background service
+import 'package:claim_survey_app/services/background_location_service.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
-// Import the background service
-import 'package:claim_survey_app/services/background_location_service.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final String taskTitle;
@@ -359,18 +359,29 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       _statusMessage = 'ກຳລັງນຳທາງ...';
     });
 
-    // Start background location service
+    // Start background location service for when app is minimized
     await BackgroundLocationService.startTracking(
       taskId: widget.taskId,
       taskTitle: widget.taskTitle,
     );
 
-    // Listen to location updates from background service
+    // ALSO start foreground tracking (this is what was working before)
+    _positionStreamSubscription =
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 10,
+          ),
+        ).listen((Position position) {
+          _updateNavigationWithNewPosition(position);
+        });
+
+    // Listen to background service updates (as backup when app is in background)
     _backgroundLocationSubscription = BackgroundLocationService.service
         .on('update')
         .listen((event) {
           if (event != null && mounted) {
-            final data = event;
+            final data = event as Map<String, dynamic>;
 
             Position newPosition = Position(
               latitude: data['latitude'],
@@ -397,7 +408,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     // Stop background service
     await BackgroundLocationService.stopTracking();
 
-    // Cancel subscription
+    // Cancel BOTH subscriptions
+    _positionStreamSubscription?.cancel();
+    _positionStreamSubscription = null;
+
     _backgroundLocationSubscription?.cancel();
     _backgroundLocationSubscription = null;
 
