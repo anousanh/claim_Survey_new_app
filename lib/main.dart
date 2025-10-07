@@ -1,12 +1,17 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'services/background_location_service.dart';
 import 'model/task_model.dart';
-import 'screen/report/report_screen.dart';
 import 'screen/task_list_screen.dart';
+import 'screen/report/report_screen.dart';
 import 'screen/user_profile_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await BackgroundLocationService.initializeService();
   runApp(const MyApp());
 }
 
@@ -25,34 +30,125 @@ class MyApp extends StatelessWidget {
         appBarTheme: const AppBarTheme(centerTitle: false, elevation: 0),
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0099FF)),
       ),
-      home: const SplashScreen(),
+      home: const SplashPermissionScreen(),
     );
   }
 }
 
-// Splash Screen
-class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+/// First splash screen — handles permissions & first-time setup
+class SplashPermissionScreen extends StatefulWidget {
+  const SplashPermissionScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  State<SplashPermissionScreen> createState() => _SplashPermissionScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashPermissionScreenState extends State<SplashPermissionScreen> {
   @override
   void initState() {
     super.initState();
-    _navigateToMain();
+    _checkFirstTimeAndRequestPermission();
   }
 
-  Future<void> _navigateToMain() async {
-    await Future.delayed(const Duration(seconds: 2));
+  Future<void> _checkFirstTimeAndRequestPermission() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool isFirstTime = prefs.getBool('first_time') ?? true;
+
+    if (isFirstTime) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (mounted) {
+        await _showWelcomeDialog();
+        await _requestLocationPermission();
+        await prefs.setBool('first_time', false);
+      }
+    } else {
+      await _checkPermissionStatus();
+    }
+
     if (mounted) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (context) => const MainScreen()),
       );
     }
   }
+
+  Future<void> _showWelcomeDialog() async {
+    return showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text(
+            'ຍິນດີຕ້ອນຮັບ',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('ແອັບນີ້ຕ້ອງການການອະນຸຍາດສະຖານທີ່ຕະຫຼອດເວລາເພື່ອ:'),
+              SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.location_on, color: Color(0xFF0099FF), size: 20),
+                  SizedBox(width: 8),
+                  Expanded(child: Text('ຕິດຕາມຕຳແໜ່ງຂອງທ່ານ')),
+                ],
+              ),
+              SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.navigation, color: Color(0xFF0099FF), size: 20),
+                  SizedBox(width: 8),
+                  Expanded(child: Text('ນຳທາງໄປຫາສະຖານທີ່ເກີດເຫດ')),
+                ],
+              ),
+              SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.notifications, color: Color(0xFF0099FF), size: 20),
+                  SizedBox(width: 8),
+                  Expanded(child: Text('ແຈ້ງເຕືອນລູກຄ້າເມື່ອຢູ່ໃກ້ໆ')),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('ຕົກລົງ'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _requestLocationPermission() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      await Geolocator.requestPermission();
+    }
+  }
+
+  Future<void> _checkPermissionStatus() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      debugPrint('Location permission not granted');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const SplashScreen(message: 'ກຳລັງກຽມພ້ອມ...');
+  }
+}
+
+/// SplashScreen used by both startup & permission screen
+class SplashScreen extends StatelessWidget {
+  final String message;
+  const SplashScreen({super.key, required this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -73,9 +169,9 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            const Text(
-              'ກຳລັງໂຫຼດ...',
-              style: TextStyle(fontSize: 16, color: Colors.white70),
+            Text(
+              message,
+              style: const TextStyle(fontSize: 16, color: Colors.white70),
             ),
             const SizedBox(height: 30),
             const CircularProgressIndicator(color: Colors.white),
@@ -86,7 +182,7 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 }
 
-// Main Screen with Bottom Navigation
+/// MainScreen — bottom navigation with notifications
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
@@ -106,7 +202,7 @@ class _MainScreenState extends State<MainScreen> {
 
   final List<String> _titles = [
     'ແກ້ໄຂອຸບັດຕິເຫດ',
-    'ແກ້ໄຂຄະດີເພີມເຕີ່ມ',
+    'ແກ້ໄຂຄະດີເພີ່ມເຕີ່ມ',
     'ລາຍງານ',
     'ຂໍ້ມູນຜູ້ໃຊ້',
   ];
@@ -120,7 +216,7 @@ class _MainScreenState extends State<MainScreen> {
 
   final List<String> _labels = [
     'ອຸບັດຕິເຫດ',
-    'ຄະດີເພີ່ມເຕີມ',
+    'ຄະດີເພີ່ມເຕີ່ມ',
     'ລາຍງານ',
     'ຂໍ້ມູນຜູ້ໃຊ້',
   ];
@@ -130,7 +226,6 @@ class _MainScreenState extends State<MainScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF0099FF),
-        elevation: 0,
         title: Text(
           _titles[_selectedIndex],
           style: const TextStyle(
@@ -148,9 +243,7 @@ class _MainScreenState extends State<MainScreen> {
                   color: Colors.white,
                   size: 28,
                 ),
-                onPressed: () {
-                  _showNotifications();
-                },
+                onPressed: _showNotifications,
               ),
               Positioned(
                 right: 8,
@@ -182,37 +275,17 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
       body: IndexedStack(index: _selectedIndex, children: _screens),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
-          ],
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _selectedIndex,
-          onTap: (index) {
-            setState(() {
-              _selectedIndex = index;
-            });
-          },
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: Colors.white,
-          selectedItemColor: const Color(0xFF0099FF),
-          unselectedItemColor: Colors.grey[400],
-          selectedFontSize: 13,
-          unselectedFontSize: 12,
-          elevation: 0,
-          items: List.generate(
-            _icons.length,
-            (index) => BottomNavigationBarItem(
-              icon: Icon(_icons[index], size: 26),
-              label: _labels[index],
-            ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: (index) => setState(() => _selectedIndex = index),
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: const Color(0xFF0099FF),
+        unselectedItemColor: Colors.grey[400],
+        items: List.generate(
+          _icons.length,
+          (index) => BottomNavigationBarItem(
+            icon: Icon(_icons[index]),
+            label: _labels[index],
           ),
         ),
       ),
@@ -229,7 +302,6 @@ class _MainScreenState extends State<MainScreen> {
         return Container(
           padding: const EdgeInsets.all(20),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
               Row(
@@ -248,21 +320,21 @@ class _MainScreenState extends State<MainScreen> {
               const SizedBox(height: 16),
               _buildNotificationItem(
                 'ຄະດີໃໝ່',
-                'ທ່ານໄດ້ຮັບມອບໝາຍຄະດີ POL-2024-006',
+                'ທ່ານໄດ້ຮັບມອບໝາຍ POL-2024-006',
                 '5 ນາທີກ່ອນ',
                 Icons.assignment,
                 Colors.blue,
               ),
               _buildNotificationItem(
                 'ຄະດີດ່ວນ',
-                'ຄະດີ POL-2024-001 ຕ້ອງການການດຳເນີນການດ່ວນ',
+                'POL-2024-001 ຕ້ອງການການດຳເນີນການດ່ວນ',
                 '1 ຊົ່ວໂມງກ່ອນ',
                 Icons.warning,
                 Colors.orange,
               ),
               _buildNotificationItem(
                 'ລະບົບ',
-                'ອັບເດດແອັບເວີຊັນໃໝ່ມີແລ້ວ',
+                'ອັບເດດແອັບໃໝ່ພ້ອມໃຊ້ແລ້ວ',
                 '2 ຊົ່ວໂມງກ່ອນ',
                 Icons.system_update,
                 Colors.green,
