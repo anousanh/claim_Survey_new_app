@@ -1,17 +1,21 @@
 // lib/main.dart
+import 'package:claim_survey_app/screen/login/login_screen.dart';
+import 'package:claim_survey_app/services/background_location_service.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'services/background_location_service.dart';
 import 'model/task_model.dart';
-import 'screen/task_list_screen.dart';
 import 'screen/report/report_screen.dart';
+import 'screen/task_list_screen.dart';
 import 'screen/user_profile_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize background service
   await BackgroundLocationService.initializeService();
+
   runApp(const MyApp());
 }
 
@@ -35,7 +39,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/// First splash screen — handles permissions & first-time setup
+/// Splash screen to handle first-time permission request
 class SplashPermissionScreen extends StatefulWidget {
   const SplashPermissionScreen({super.key});
 
@@ -51,10 +55,12 @@ class _SplashPermissionScreenState extends State<SplashPermissionScreen> {
   }
 
   Future<void> _checkFirstTimeAndRequestPermission() async {
+    // Check if this is first time opening the app
     SharedPreferences prefs = await SharedPreferences.getInstance();
     bool isFirstTime = prefs.getBool('first_time') ?? true;
 
     if (isFirstTime) {
+      // Show welcome dialog
       await Future.delayed(const Duration(milliseconds: 500));
       if (mounted) {
         await _showWelcomeDialog();
@@ -62,12 +68,17 @@ class _SplashPermissionScreenState extends State<SplashPermissionScreen> {
         await prefs.setBool('first_time', false);
       }
     } else {
+      // Not first time, just check permission status
       await _checkPermissionStatus();
     }
 
+    // Add delay for splash effect
+    await Future.delayed(const Duration(seconds: 2));
+
+    // Navigate to main screen
     if (mounted) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const MainScreen()),
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
       );
     }
   }
@@ -86,7 +97,10 @@ class _SplashPermissionScreenState extends State<SplashPermissionScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('ແອັບນີ້ຕ້ອງການການອະນຸຍາດສະຖານທີ່ຕະຫຼອດເວລາເພື່ອ:'),
+              Text(
+                'ແອັບນີ້ຕ້ອງການການອະນຸຍາດສະຖານທີ່ຕະຫຼອດເວລາເພື່ອ:',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
               SizedBox(height: 12),
               Row(
                 children: [
@@ -108,14 +122,16 @@ class _SplashPermissionScreenState extends State<SplashPermissionScreen> {
                 children: [
                   Icon(Icons.notifications, color: Color(0xFF0099FF), size: 20),
                   SizedBox(width: 8),
-                  Expanded(child: Text('ແຈ້ງເຕືອນລູກຄ້າເມື່ອຢູ່ໃກ້ໆ')),
+                  Expanded(child: Text('ແຈ້ງເຕືອນລູກຄ້າເມື່ອທ່ານຢູ່ໃກ້ໆ')),
                 ],
               ),
             ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
               child: const Text('ຕົກລົງ'),
             ),
           ],
@@ -126,29 +142,20 @@ class _SplashPermissionScreenState extends State<SplashPermissionScreen> {
 
   Future<void> _requestLocationPermission() async {
     LocationPermission permission = await Geolocator.checkPermission();
+
     if (permission == LocationPermission.denied) {
-      await Geolocator.requestPermission();
+      permission = await Geolocator.requestPermission();
     }
   }
 
   Future<void> _checkPermissionStatus() async {
     LocationPermission permission = await Geolocator.checkPermission();
+
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
       debugPrint('Location permission not granted');
     }
   }
-
-  @override
-  Widget build(BuildContext context) {
-    return const SplashScreen(message: 'ກຳລັງກຽມພ້ອມ...');
-  }
-}
-
-/// SplashScreen used by both startup & permission screen
-class SplashScreen extends StatelessWidget {
-  final String message;
-  const SplashScreen({super.key, required this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -169,9 +176,9 @@ class SplashScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            Text(
-              message,
-              style: const TextStyle(fontSize: 16, color: Colors.white70),
+            const Text(
+              'ກຳລັງກຽມພ້ອມ...',
+              style: TextStyle(fontSize: 16, color: Colors.white70),
             ),
             const SizedBox(height: 30),
             const CircularProgressIndicator(color: Colors.white),
@@ -182,7 +189,7 @@ class SplashScreen extends StatelessWidget {
   }
 }
 
-/// MainScreen — bottom navigation with notifications
+// Main Screen with Bottom Navigation
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
@@ -216,7 +223,7 @@ class _MainScreenState extends State<MainScreen> {
 
   final List<String> _labels = [
     'ອຸບັດຕິເຫດ',
-    'ຄະດີເພີ່ມເຕີ່ມ',
+    'ຄະດີເພີ່ມເຕີມ',
     'ລາຍງານ',
     'ຂໍ້ມູນຜູ້ໃຊ້',
   ];
@@ -226,6 +233,7 @@ class _MainScreenState extends State<MainScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF0099FF),
+        elevation: 0,
         title: Text(
           _titles[_selectedIndex],
           style: const TextStyle(
@@ -243,7 +251,9 @@ class _MainScreenState extends State<MainScreen> {
                   color: Colors.white,
                   size: 28,
                 ),
-                onPressed: _showNotifications,
+                onPressed: () {
+                  _showNotifications();
+                },
               ),
               Positioned(
                 right: 8,
@@ -275,17 +285,37 @@ class _MainScreenState extends State<MainScreen> {
         ],
       ),
       body: IndexedStack(index: _selectedIndex, children: _screens),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFF0099FF),
-        unselectedItemColor: Colors.grey[400],
-        items: List.generate(
-          _icons.length,
-          (index) => BottomNavigationBarItem(
-            icon: Icon(_icons[index]),
-            label: _labels[index],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _selectedIndex,
+          onTap: (index) {
+            setState(() {
+              _selectedIndex = index;
+            });
+          },
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.white,
+          selectedItemColor: const Color(0xFF0099FF),
+          unselectedItemColor: Colors.grey[400],
+          selectedFontSize: 13,
+          unselectedFontSize: 12,
+          elevation: 0,
+          items: List.generate(
+            _icons.length,
+            (index) => BottomNavigationBarItem(
+              icon: Icon(_icons[index], size: 26),
+              label: _labels[index],
+            ),
           ),
         ),
       ),
@@ -302,6 +332,7 @@ class _MainScreenState extends State<MainScreen> {
         return Container(
           padding: const EdgeInsets.all(20),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
               Row(
@@ -320,21 +351,21 @@ class _MainScreenState extends State<MainScreen> {
               const SizedBox(height: 16),
               _buildNotificationItem(
                 'ຄະດີໃໝ່',
-                'ທ່ານໄດ້ຮັບມອບໝາຍ POL-2024-006',
+                'ທ່ານໄດ້ຮັບມອບໝາຍຄະດີ POL-2024-006',
                 '5 ນາທີກ່ອນ',
                 Icons.assignment,
                 Colors.blue,
               ),
               _buildNotificationItem(
                 'ຄະດີດ່ວນ',
-                'POL-2024-001 ຕ້ອງການການດຳເນີນການດ່ວນ',
+                'ຄະດີ POL-2024-001 ຕ້ອງການການດຳເນີນການດ່ວນ',
                 '1 ຊົ່ວໂມງກ່ອນ',
                 Icons.warning,
                 Colors.orange,
               ),
               _buildNotificationItem(
                 'ລະບົບ',
-                'ອັບເດດແອັບໃໝ່ພ້ອມໃຊ້ແລ້ວ',
+                'ອັບເດດແອັບເວີຊັນໃໝ່ມີແລ້ວ',
                 '2 ຊົ່ວໂມງກ່ອນ',
                 Icons.system_update,
                 Colors.green,
