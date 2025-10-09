@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../model/task_model.dart';
+import '../services/api/api_service.dart';
 import 'case_detail_screen.dart';
 
 class TaskListScreen extends StatefulWidget {
@@ -12,366 +13,245 @@ class TaskListScreen extends StatefulWidget {
   State<TaskListScreen> createState() => _TaskListScreenState();
 }
 
-class _TaskListScreenState extends State<TaskListScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  // Sample data - replace with API calls
-  final List<Task> _allTasks = [
-    Task(
-      id: 'TASK001',
-      title: 'ອຸບັດຕິເຫດລົດຈັກ',
-      policyNumber: 'POL-2024-001',
-      policyType: 'car',
-      status: TaskStatus.newTask,
-      assignedDate: DateTime.now(),
-      customerName: 'ທ. ສົມສັກ',
-      location: 'ນະຄອນຫຼວງວຽງຈັນ',
-      lat: 17.9659061,
-      lng: 102.6135339,
-      isUrgent: true,
-      category: TaskCategory.accident,
-      description: 'ລົດຈັກຊົນກັນ ບໍລິເວນທາງແຍກ ຖະໜົນລ້ານຊ້າງ',
-    ),
-    Task(
-      id: 'TASK002',
-      title: 'ໄຟໄໝ້ເຮືອນ',
-      policyNumber: 'POL-2024-002',
-      policyType: 'home',
-      status: TaskStatus.inProgress,
-      assignedDate: DateTime.now().subtract(Duration(days: 1)),
-      customerName: 'ນ. ມະນີ',
-      location: 'ແຂວງຫຼວງພະບາງ',
-      category: TaskCategory.additional,
-      description: 'ໄຟໄໝ້ເຮືອນບາງສ່ວນ ເນື່ອງຈາກໄຟຟ້າລັດວົງຈອນ',
-    ),
-    Task(
-      id: 'TASK003',
-      title: 'ອຸບັດຕິເຫດລົດຍົນ',
-      policyNumber: 'POL-2024-003',
-      policyType: 'car',
-      status: TaskStatus.completed,
-      assignedDate: DateTime.now().subtract(Duration(days: 2)),
-      customerName: 'ທ. ບຸນມີ',
-      location: 'ແຂວງສະຫວັນນະເຂດ',
-      category: TaskCategory.accident,
-    ),
-    Task(
-      id: 'TASK004',
-      title: 'ຄ່າປິ່ນປົວສຸຂະພາບ',
-      policyNumber: 'POL-2024-004',
-      policyType: 'health',
-      status: TaskStatus.newTask,
-      assignedDate: DateTime.now(),
-      customerName: 'ນ. ສີປອນ',
-      location: 'ນະຄອນຫຼວງວຽງຈັນ',
-      category: TaskCategory.additional,
-    ),
-    Task(
-      id: 'TASK005',
-      title: 'ລົດເສຍຫາຍຈາກນ້ຳຖ້ວມ',
-      policyNumber: 'POL-2024-005',
-      policyType: 'car',
-      status: TaskStatus.cancelled,
-      assignedDate: DateTime.now().subtract(Duration(days: 3)),
-      customerName: 'ທ. ຄຳພອນ',
-      location: 'ແຂວງຈຳປາສັກ',
-      category: TaskCategory.accident,
-    ),
-  ];
+class _TaskListScreenState extends State<TaskListScreen> {
+  final ApiService _apiService = ApiService();
+  List<Task> _tasks = [];
+  bool _isLoading = false;
+  String _errorMessage = '';
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _loadTasksFromAPI();
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
+  /// Load tasks from API
+  Future<void> _loadTasksFromAPI() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
 
-  List<Task> _getTasksByStatus(TaskStatus status) {
-    return _allTasks
-        .where(
-          (task) => task.category == widget.category && task.status == status,
-        )
-        .toList();
+    try {
+      final response = await _apiService.getTaskList(
+        taskType: widget.category == TaskCategory.accident
+            ? 'SOLVING'
+            : 'RESOLVING',
+        status: null, // Load all statuses
+      );
+
+      if (response.isSuccess) {
+        final tasks = response.getDataArray<Task>(
+          'claims',
+          (json) => Task.fromJson(json),
+        );
+
+        setState(() {
+          _tasks = tasks;
+        });
+      } else {
+        setState(() {
+          _errorMessage = response.message;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'ເກີດຂໍ້ຜິດພາດ: $e';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      body: Column(
-        children: [
-          Container(
-            color: Colors.white,
-            child: TabBar(
-              controller: _tabController,
-              labelColor: Color(0xFF0099FF),
-              unselectedLabelColor: Colors.grey,
-              indicatorColor: Color(0xFF0099FF),
-              indicatorWeight: 3,
-              tabs: [
-                Tab(text: 'ໃໝ່'),
-                Tab(text: 'ກຳລັງດຳເນີນການ'),
-                Tab(text: 'ປະຫວັດ'),
-              ],
+    if (_isLoading && _tasks.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF0099FF)),
+      );
+    }
+
+    if (_errorMessage.isNotEmpty && _tasks.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              _errorMessage,
+              style: TextStyle(color: Colors.grey[600]),
+              textAlign: TextAlign.center,
             ),
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildTaskList(TaskStatus.newTask),
-                _buildTaskList(TaskStatus.inProgress),
-                _buildHistoryList(),
-              ],
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _loadTasksFromAPI,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0099FF),
+              ),
+              child: const Text(
+                'ລອງໃໝ່',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
+      );
+    }
+
+    if (_tasks.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'ບໍ່ມີວຽກ',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ✅ REFRESH INDICATOR HERE!
+    return RefreshIndicator(
+      onRefresh: _loadTasksFromAPI,
+      color: const Color(0xFF0099FF),
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(), // Important!
+        padding: const EdgeInsets.all(16),
+        itemCount: _tasks.length,
+        itemBuilder: (context, index) {
+          final task = _tasks[index];
+          return _buildTaskCard(task);
+        },
       ),
-    );
-  }
-
-  Widget _buildTaskList(TaskStatus status) {
-    final tasks = _getTasksByStatus(status);
-
-    if (tasks.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.inbox_outlined, size: 64, color: Colors.grey[400]),
-            SizedBox(height: 16),
-            Text(
-              'ບໍ່ມີລາຍການ',
-              style: TextStyle(color: Colors.grey[600], fontSize: 16),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: EdgeInsets.all(16),
-      itemCount: tasks.length,
-      itemBuilder: (context, index) {
-        final task = tasks[index];
-        return _buildTaskCard(task);
-      },
-    );
-  }
-
-  Widget _buildHistoryList() {
-    final historyTasks = _allTasks
-        .where(
-          (task) =>
-              task.category == widget.category &&
-              (task.status == TaskStatus.completed ||
-                  task.status == TaskStatus.cancelled),
-        )
-        .toList();
-
-    if (historyTasks.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.history, size: 64, color: Colors.grey[400]),
-            SizedBox(height: 16),
-            Text(
-              'ບໍ່ມີປະຫວັດ',
-              style: TextStyle(color: Colors.grey[600], fontSize: 16),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: EdgeInsets.all(16),
-      itemCount: historyTasks.length,
-      itemBuilder: (context, index) {
-        final task = historyTasks[index];
-        return _buildTaskCard(task);
-      },
     );
   }
 
   Widget _buildTaskCard(Task task) {
     return Card(
+      margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
-      margin: EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        onTap: () {
-          Navigator.push(
+        onTap: () async {
+          // Navigate to detail screen
+          final result = await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => CaseDetailScreen(task: task),
             ),
           );
+
+          // If detail screen returns true, reload list
+          if (result == true) {
+            _loadTasksFromAPI();
+          }
         },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _getPolicyIcon(task.policyType),
-                  SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                task.title,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            if (task.isUrgent)
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.red[50],
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  'ດ່ວນ',
-                                  style: TextStyle(
-                                    color: Colors.red[700],
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'ເລກທີ: ${task.policyNumber}',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      task.title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
+                  _getStatusChip(task.status),
                 ],
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(Icons.person_outline, size: 16, color: Colors.grey[600]),
-                  SizedBox(width: 4),
+                  Icon(Icons.person, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
                   Text(
                     task.customerName,
                     style: TextStyle(fontSize: 14, color: Colors.grey[700]),
                   ),
                 ],
               ),
-              SizedBox(height: 6),
+              const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(
-                    Icons.location_on_outlined,
-                    size: 16,
-                    color: Colors.grey[600],
-                  ),
-                  SizedBox(width: 4),
+                  Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       task.location,
                       style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
               ),
-              SizedBox(height: 6),
+              const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(
-                    Icons.calendar_today_outlined,
-                    size: 16,
-                    color: Colors.grey[600],
-                  ),
-                  SizedBox(width: 4),
+                  Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
                   Text(
                     _formatDate(task.assignedDate),
                     style: TextStyle(fontSize: 14, color: Colors.grey[700]),
                   ),
-                  Spacer(),
-                  _getStatusChip(task.status),
                 ],
               ),
+              if (task.isUrgent) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.red[50],
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.priority_high,
+                        size: 14,
+                        color: Colors.red[700],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'ດ່ວນ',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.red[700],
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
       ),
     );
-  }
-
-  Widget _getPolicyIcon(String policyType) {
-    IconData icon;
-    Color color;
-
-    switch (policyType) {
-      case 'car':
-        icon = Icons.directions_car;
-        color = Colors.blue;
-        break;
-      case 'home':
-        icon = Icons.home;
-        color = Colors.orange;
-        break;
-      case 'health':
-        icon = Icons.local_hospital;
-        color = Colors.green;
-        break;
-      default:
-        icon = Icons.policy;
-        color = Colors.grey;
-    }
-
-    return Container(
-      padding: EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Tooltip(
-        message: _getPolicyTypeName(policyType),
-        child: Icon(icon, color: color, size: 24),
-      ),
-    );
-  }
-
-  String _getPolicyTypeName(String type) {
-    switch (type) {
-      case 'car':
-        return 'ປະກັນໄພລົດ';
-      case 'home':
-        return 'ປະກັນໄພເຮືອນ';
-      case 'health':
-        return 'ປະກັນໄພສຸຂະພາບ';
-      default:
-        return type;
-    }
   }
 
   Widget _getStatusChip(TaskStatus status) {
@@ -398,23 +278,24 @@ class _TaskListScreenState extends State<TaskListScreen>
     }
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Text(
         text,
         style: TextStyle(
           color: color,
           fontSize: 12,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.bold,
         ),
       ),
     );
   }
 
   String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 }

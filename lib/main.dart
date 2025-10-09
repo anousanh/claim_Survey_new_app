@@ -1,5 +1,4 @@
 // lib/main.dart
-import 'package:claim_survey_app/screen/login/login_screen.dart';
 import 'package:claim_survey_app/services/background_location_service.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -78,7 +77,7 @@ class _SplashPermissionScreenState extends State<SplashPermissionScreen> {
     // Navigate to main screen
     if (mounted) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        MaterialPageRoute(builder: (context) => const MainScreen()),
       );
     }
   }
