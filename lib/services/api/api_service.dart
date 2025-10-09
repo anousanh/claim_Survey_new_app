@@ -1,354 +1,299 @@
-// lib/services/api_service.dart
 import 'dart:convert';
 
+import 'package:claim_survey_app/model/api_response.dart';
+import 'package:claim_survey_app/services/encryption_service.dart';
+import 'package:claim_survey_app/utils/app_config.dart';
+import 'package:crypto/crypto.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
 
 class ApiService {
-  // TODO: Replace with your actual API base URL
-  static const String baseUrl = 'https://your-api-url.com/api';
+  final AppConfig _appConfig = AppConfig();
 
-  // Singleton pattern
-  static final ApiService _instance = ApiService._internal();
-  factory ApiService() => _instance;
-  ApiService._internal();
+  // Replace with your actual API key from Android strings.xml
+  static const String _apiKey = '8D494B40136EC90739D3959B52BE1864C245AGL';
 
-  String? _authToken;
-
-  /// Initialize API service with auth token
-  Future<void> init() async {
-    final prefs = await SharedPreferences.getInstance();
-    _authToken = prefs.getString('auth_token');
-  }
-
-  /// Save auth token
-  Future<void> setAuthToken(String token) async {
-    _authToken = token;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('auth_token', token);
-  }
-
-  /// Clear auth token (logout)
-  Future<void> clearAuthToken() async {
-    _authToken = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('auth_token');
-  }
-
-  /// Get headers with auth token
-  Map<String, String> _getHeaders() {
-    return {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      if (_authToken != null) 'Authorization': 'Bearer $_authToken',
-    };
-  }
-
-  /// POST request to API
-  Future<ApiResponse> post(
-    String endpoint,
+  /// Main POST request method
+  ///
+  /// [actionName] - API action name (e.g., 'login', 'getClaims')
+  /// [params] - Request parameters
+  /// [includeToken] - Whether to include user token in request
+  /// [additionalParams] - Additional parameters to add after signature
+  Future<APIResponse> postRequest(
+    String actionName,
     Map<String, dynamic> params, {
-    bool requiresAuth = true,
+    bool includeToken = false,
+    Map<String, dynamic>? additionalParams,
   }) async {
     try {
-      print('========== API REQUEST ==========');
-      print('Endpoint: $endpoint');
-      print('Params: $params');
-      print('=================================');
+      // Get API configuration
+      final String apiUrl = await _appConfig.getApiUrl();
+      final dbMode = await _appConfig.getDBMode();
 
+      // Add db_mode to params
+      params['db_mode'] = dbMode.name.toUpperCase();
+
+      // Include token if required
+      if (includeToken) {
+        final userToken = await _getUserToken();
+        if (userToken != null) {
+          params['us'] = userToken['username'];
+          params['token'] = userToken['token'];
+        } else {
+          params['ux'] = 'none';
+        }
+      }
+
+      // Prepare post parameters
+      final postParams = <String, dynamic>{};
+      final itemKeys = <String>[];
+      final items = <String>[];
+
+      // Add action
+      itemKeys.add('action');
+      items.add(jsonEncode(actionName));
+      postParams['action'] = actionName;
+
+      // Add action time
+      final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
+      itemKeys.add('action_time');
+      items.add(jsonEncode(now));
+      postParams['action_time'] = now;
+
+      // Add all params
+      params.forEach((key, value) {
+        itemKeys.add(key);
+        items.add(jsonEncode(value));
+        postParams[key] = value;
+      });
+
+      // Create signature
+      postParams['key_names'] = itemKeys.join(',');
+      final strItems = items.join(',');
+      final signature = _createHmacSha256Signature(_apiKey, strItems);
+      postParams['signature'] = signature;
+
+      // Add additional params after signature (if any)
+      if (additionalParams != null) {
+        postParams.addAll(additionalParams);
+      }
+
+      // Log request for debugging (remove in production)
+      _logRequest(actionName, postParams);
+
+      // Make HTTP request
       final response = await http
           .post(
-            Uri.parse('$baseUrl/$endpoint'),
-            headers: _getHeaders(),
-            body: json.encode(params),
+            Uri.parse(apiUrl),
+            headers: {
+              'Content-Type': 'application/json; charset=utf-8',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode(postParams),
           )
           .timeout(
-            const Duration(seconds: 30),
+            const Duration(seconds: 60),
             onTimeout: () {
-              throw Exception('Connection timeout');
+              throw Exception(
+                'Connection timeout - Please check your internet connection',
+              );
             },
           );
 
-      print('========== API RESPONSE ==========');
-      print('Status Code: ${response.statusCode}');
-      print('Body: ${response.body}');
-      print('==================================');
-
-      return ApiResponse.fromJson(json.decode(response.body));
+      // Parse response
+      return _handleResponse(response);
+    } on http.ClientException catch (e) {
+      return APIResponse(
+        status: 0,
+        message: 'Network error: ${e.message}',
+        error: 'CLIENT_EXCEPTION',
+        data: null,
+      );
     } catch (e) {
-      print('API Error: $e');
-      return ApiResponse(
-        status: 500,
-        message: 'Connection error',
+      return APIResponse(
+        status: 0,
+        message: 'Request failed: ${e.toString()}',
         error: e.toString(),
-        data: {},
+        data: null,
       );
     }
   }
 
-  /// GET request to API
-  Future<ApiResponse> get(
-    String endpoint, {
-    Map<String, dynamic>? queryParams,
-    bool requiresAuth = true,
-  }) async {
+  /// Handle HTTP response
+  APIResponse _handleResponse(http.Response response) {
     try {
-      Uri uri = Uri.parse('$baseUrl/$endpoint');
-
-      if (queryParams != null && queryParams.isNotEmpty) {
-        uri = uri.replace(
-          queryParameters: queryParams.map(
-            (key, value) => MapEntry(key, value.toString()),
-          ),
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
+        return APIResponse.fromJson(jsonResponse);
+      } else if (response.statusCode == 404) {
+        return APIResponse(
+          status: 404,
+          message: 'API endpoint not found',
+          error: 'NOT_FOUND',
+          data: null,
+        );
+      } else if (response.statusCode == 500) {
+        return APIResponse(
+          status: 500,
+          message: 'Server error - Please try again later',
+          error: 'SERVER_ERROR',
+          data: null,
+        );
+      } else {
+        return APIResponse(
+          status: response.statusCode,
+          message: 'HTTP Error: ${response.statusCode}',
+          error: response.body,
+          data: null,
         );
       }
-
-      print('========== API REQUEST ==========');
-      print('GET: $uri');
-      print('=================================');
-
-      final response = await http
-          .get(uri, headers: _getHeaders())
-          .timeout(
-            const Duration(seconds: 30),
-            onTimeout: () {
-              throw Exception('Connection timeout');
-            },
-          );
-
-      print('========== API RESPONSE ==========');
-      print('Status Code: ${response.statusCode}');
-      print('Body: ${response.body}');
-      print('==================================');
-
-      return ApiResponse.fromJson(json.decode(response.body));
     } catch (e) {
-      print('API Error: $e');
-      return ApiResponse(
-        status: 500,
-        message: 'Connection error',
+      return APIResponse(
+        status: 0,
+        message: 'Failed to parse response',
         error: e.toString(),
-        data: {},
+        data: null,
       );
     }
   }
 
-  // ==================== SPECIFIC API CALLS ====================
-
-  /// Login
-  Future<ApiResponse> login(String email, String password) async {
-    return await post('login', {
-      'email': email,
-      'password': password,
-    }, requiresAuth: false);
-  }
-
-  /// Get Motor Claim Task
-  Future<ApiResponse> getMotorClaimTask({
-    required int claimNo,
-    required String taskType,
-  }) async {
-    return await post('getMotorClaimTask', {
-      'claimNo': claimNo,
-      'taskType': taskType,
-    });
-  }
-
-  /// Get Motor Claim (for resolving)
-  Future<ApiResponse> getMotorClaim({
-    required int taskNo,
-    required String taskType,
-  }) async {
-    return await post('getMotorClaim', {
-      'taskNo': taskNo,
-      'taskType': taskType,
-    });
-  }
-
-  /// Task Response (Accept/Reject)
-  Future<ApiResponse> taskResponse({
-    required int taskNo,
-    required bool isAccepted,
-    String remark = '',
-  }) async {
-    return await post('taskResponse', {
-      'taskNo': taskNo,
-      'isAccepted': isAccepted,
-      'remark': remark,
-    });
-  }
-
-  /// Arrived at Site
-  Future<ApiResponse> arrivedAtSite({
-    required int claimNo,
-    required double latitude,
-    required double longitude,
-    required double distance,
-    required bool isArrived,
-  }) async {
-    return await post('arrivedAtSite', {
-      'claimNo': claimNo,
-      'latitude': latitude,
-      'longitude': longitude,
-      'distance': distance,
-      'isArrived': isArrived,
-    });
-  }
-
-  /// Finish Motor Task
-  Future<ApiResponse> finishMotorTask({
-    required int claimNo,
-    required int taskNo,
-    required String taskType,
-  }) async {
-    return await post('MTFinishTask', {
-      'claimNo': claimNo,
-      'taskNo': taskNo,
-      'taskType': taskType,
-    });
-  }
-
-  /// Upload Document
-  Future<ApiResponse> uploadDocument({
-    required int claimNo,
-    required String documentType,
-    required String base64Image,
-  }) async {
-    return await post('uploadDocument', {
-      'claimNo': claimNo,
-      'documentType': documentType,
-      'image': base64Image,
-    });
-  }
-
-  /// Save Estimate Cost
-  Future<ApiResponse> saveEstimateCost({
-    required int claimNo,
-    required double estimatedCost,
-    String? remarks,
-  }) async {
-    return await post('saveEstimateCost', {
-      'claimNo': claimNo,
-      'estimatedCost': estimatedCost,
-      'remarks': remarks,
-    });
-  }
-
-  /// Get Task List
-  Future<ApiResponse> getTaskList({
-    required String taskType,
-    int? status,
-  }) async {
-    return await post('getTaskList', {
-      'taskType': taskType,
-      if (status != null) 'status': status,
-    });
-  }
-}
-
-/// API Response Model
-class ApiResponse {
-  final int status;
-  final String message;
-  final String error;
-  final Map<String, dynamic> data;
-
-  ApiResponse({
-    required this.status,
-    required this.message,
-    required this.error,
-    required this.data,
-  });
-
-  factory ApiResponse.fromJson(Map<String, dynamic> json) {
-    return ApiResponse(
-      status: json['status'] ?? 500,
-      message: json['message'] ?? '',
-      error: json['error'] ?? '',
-      data: json['data'] ?? {},
-    );
-  }
-
-  /// Check if request was successful
-  bool get isSuccess => status == 200;
-
-  /// Get single object from data
-  T? getData<T>(String key, T Function(Map<String, dynamic>) fromJson) {
+  /// Create HMAC SHA256 signature (same as Android implementation)
+  String _createHmacSha256Signature(String key, String data) {
     try {
-      if (data.containsKey(key)) {
-        return fromJson(data[key] as Map<String, dynamic>);
-      }
+      final keyBytes = utf8.encode(key);
+      final dataBytes = utf8.encode(data);
+      final hmac = Hmac(sha256, keyBytes);
+      final digest = hmac.convert(dataBytes);
+      return base64Encode(digest.bytes).trim();
     } catch (e) {
-      print('Error parsing data: $e');
-    }
-    return null;
-  }
-
-  /// Get array of objects from data
-  List<T> getDataArray<T>(
-    String key,
-    T Function(Map<String, dynamic>) fromJson,
-  ) {
-    try {
-      if (data.containsKey(key)) {
-        final List<dynamic> items = data[key] as List<dynamic>;
-        return items
-            .map((item) => fromJson(item as Map<String, dynamic>))
-            .toList();
-      }
-    } catch (e) {
-      print('Error parsing data array: $e');
-    }
-    return [];
-  }
-
-  /// Get long value
-  int getLongData(String key) {
-    try {
-      return data[key] as int? ?? 0;
-    } catch (e) {
-      return 0;
-    }
-  }
-
-  /// Get int value
-  int getIntData(String key) {
-    try {
-      return data[key] as int? ?? 0;
-    } catch (e) {
-      return 0;
-    }
-  }
-
-  /// Get double value
-  double getDoubleData(String key) {
-    try {
-      return (data[key] as num?)?.toDouble() ?? 0.0;
-    } catch (e) {
-      return 0.0;
-    }
-  }
-
-  /// Get boolean value
-  bool getBooleanData(String key) {
-    try {
-      return data[key] as bool? ?? false;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  /// Get string value
-  String getStringData(String key) {
-    try {
-      return data[key] as String? ?? '';
-    } catch (e) {
+      print('❌ Error creating signature: $e');
       return '';
     }
   }
 
-  @override
-  String toString() {
-    return 'ApiResponse{status: $status, message: $message, error: $error, data: $data}';
+  /// Get user token from secure storage
+  /// Note: This is called by passing the user data directly to avoid circular dependency
+  Future<Map<String, String>?> _getUserToken() async {
+    try {
+      // Read directly from secure storage to avoid circular dependency
+      final storage = const FlutterSecureStorage();
+      final encrypted = await storage.read(key: 'user_data');
+
+      if (encrypted != null && encrypted.isNotEmpty) {
+        // Import encryption service
+        final encryptionService = EncryptionService();
+        final decrypted = encryptionService.decrypt(encrypted);
+        final Map<String, dynamic> json = jsonDecode(decrypted);
+
+        return {
+          'username': json['Username'] ?? '',
+          'token': json['Token'] ?? '',
+        };
+      }
+    } catch (e) {
+      print('❌ Error getting user token: $e');
+    }
+    return null;
+  }
+
+  /// GET request method (if needed for future use)
+  Future<APIResponse> getRequest(
+    String endpoint, {
+    Map<String, String>? queryParams,
+  }) async {
+    try {
+      final String apiUrl = await _appConfig.getApiUrl();
+      Uri uri = Uri.parse('$apiUrl/$endpoint');
+
+      if (queryParams != null && queryParams.isNotEmpty) {
+        uri = uri.replace(queryParameters: queryParams);
+      }
+
+      final response = await http
+          .get(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 60));
+
+      return _handleResponse(response);
+    } catch (e) {
+      return APIResponse(
+        status: 0,
+        message: 'GET request failed: ${e.toString()}',
+        error: e.toString(),
+        data: null,
+      );
+    }
+  }
+
+  /// Upload file with multipart request
+  Future<APIResponse> uploadFile(
+    String actionName,
+    String filePath,
+    Map<String, dynamic> params,
+  ) async {
+    try {
+      final String apiUrl = await _appConfig.getMediaUploadUrl();
+      final uri = Uri.parse(apiUrl);
+
+      final request = http.MultipartRequest('POST', uri);
+
+      // Add file
+      request.files.add(await http.MultipartFile.fromPath('file', filePath));
+
+      // Add other parameters
+      params.forEach((key, value) {
+        request.fields[key] = value.toString();
+      });
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      return _handleResponse(response);
+    } catch (e) {
+      return APIResponse(
+        status: 0,
+        message: 'File upload failed: ${e.toString()}',
+        error: e.toString(),
+        data: null,
+      );
+    }
+  }
+
+  /// Log request details for debugging
+  void _logRequest(String action, Map<String, dynamic> params) {
+    if (const bool.fromEnvironment('dart.vm.product')) {
+      // Don't log in production/release mode
+      return;
+    }
+
+    print('🔵 API Request: $action');
+    print('📦 Parameters: ${params.keys.join(', ')}');
+
+    // Don't log sensitive data
+    final safeParams = Map<String, dynamic>.from(params);
+    safeParams.remove('password');
+    safeParams.remove('token');
+    safeParams.remove('signature');
+
+    print('📝 Data: $safeParams');
+  }
+
+  /// Verify API connection
+  Future<bool> checkConnection() async {
+    try {
+      final apiUrl = await _appConfig.getApiUrl();
+      final response = await http
+          .get(Uri.parse(apiUrl))
+          .timeout(const Duration(seconds: 10));
+      return response.statusCode == 200 || response.statusCode == 404;
+    } catch (e) {
+      return false;
+    }
   }
 }

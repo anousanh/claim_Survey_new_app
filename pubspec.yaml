@@ -39,6 +39,25 @@ dependencies:
   flutter_background_service_android: ^6.2.4
   flutter_local_notifications: ^17.2.4
   flutter_svg: ^2.0.9
+  flutter_secure_storage: ^9.0.0
+  encrypt: ^5.0.3
+  crypto: ^3.0.3
+  package_info_plus: ^8.3.1
+
+  permission_handler: ^11.2.0
+
+  # JSON Serialization
+  json_annotation: ^4.8.1
+
+  intl: ^0.19.0
+
+    # Image Handling
+  image_picker: ^1.0.7
+  image: ^4.1.6
+
+  # File Management
+  path_provider: ^2.1.2
+  path: ^1.8.3
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.

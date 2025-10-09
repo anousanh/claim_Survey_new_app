@@ -1,4 +1,6 @@
-// lib/screens/login_screen.dart
+import 'package:claim_survey_app/main.dart';
+import 'package:claim_survey_app/services/api/auth_service.dart';
+import 'package:claim_survey_app/utils/app_config.dart';
 import 'package:flutter/material.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -9,15 +11,35 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isPasswordVisible = false;
   bool _isLoading = false;
+  String? _errorMessage;
+
+  final AuthService _authService = AuthService();
+  final AppConfig _appConfig = AppConfig();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkExistingSession();
+  }
+
+  Future<void> _checkExistingSession() async {
+    final user = await _authService.getCurrentUser();
+    if (user != null && mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const MainScreen()),
+      );
+    }
+  }
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -26,30 +48,56 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isLoading = true;
+        _errorMessage = null;
       });
 
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 2));
+      String username = _usernameController.text.trim().toLowerCase();
+      String password = _passwordController.text;
 
-      setState(() {
-        _isLoading = false;
-      });
+      // Handle environment prefixes
+      if (username.startsWith('test.') || username.startsWith('pentest')) {
+        username = username.replaceFirst('test.', '');
+        _appConfig.changeDBMode(DBMode.test);
+      } else if (username.startsWith('dev.')) {
+        username = username.replaceFirst('dev.', '');
+        _appConfig.changeDBMode(DBMode.development);
+      } else {
+        _appConfig.changeDBMode(DBMode.production);
+      }
 
-      // TODO: Implement actual login logic here
-      // For now, just show success message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('ເຂົ້າສູ່ລະບົບສຳເລັດ'),
-            backgroundColor: Colors.green,
-          ),
-        );
+      try {
+        final result = await _authService.login(username, password);
 
-        // Navigate to main screen
-        // Navigator.pushReplacement(
-        //   context,
-        //   MaterialPageRoute(builder: (context) => const MainScreen()),
-        // );
+        if (!mounted) return;
+
+        if (result['success']) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('ເຂົ້າສູ່ລະບົບສຳເລັດ'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const MainScreen()),
+          );
+        } else {
+          setState(() {
+            _errorMessage = result['message'] ?? 'ເຂົ້າສູ່ລະບົບບໍ່ສຳເລັດ';
+          });
+        }
+      } catch (e) {
+        setState(() {
+          _errorMessage = 'ເກີດຂໍ້ຜິດພາດ: ${e.toString()}';
+        });
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
     }
   }
@@ -60,15 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
-          child: Column(
-            children: [
-              // Top Section with Logo and Car Pattern Background
-              _buildTopSection(),
-
-              // Login Form Section
-              _buildLoginForm(),
-            ],
-          ),
+          child: Column(children: [_buildTopSection(), _buildLoginForm()]),
         ),
       ),
     );
@@ -87,15 +127,12 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       child: Stack(
         children: [
-          // Logo watermark pattern in background
           Positioned.fill(
             child: Opacity(
               opacity: 0.1,
               child: CustomPaint(painter: LogoPatternPainter()),
             ),
           ),
-
-          // Main Logo in center
           Center(
             child: Container(
               width: 120,
@@ -116,10 +153,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Image.asset(
-                    'assets/images/logo-squre.png', // Your logo path here
+                    'assets/images/logo-squre.png',
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
-                      // Fallback icon if image not found
                       return const Icon(
                         Icons.business,
                         size: 60,
@@ -144,7 +180,6 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Login Title
             const Text(
               'ເຂົ້າສູ່ລະບົບ',
               textAlign: TextAlign.center,
@@ -154,12 +189,17 @@ class _LoginScreenState extends State<LoginScreen> {
                 color: Color(0xFF2D3436),
               ),
             ),
-
+            const SizedBox(height: 8),
+            Text(
+              'ກະລຸນາໃສ່ຂໍ້ມູນຂອງທ່ານ',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
             const SizedBox(height: 40),
 
-            // Email Field
+            // Username Field
             const Text(
-              'ອີເມລ',
+              'ຊື່ຜູ້ໃຊ້',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -168,13 +208,15 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             const SizedBox(height: 8),
             TextFormField(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
+              controller: _usernameController,
+              keyboardType: TextInputType.text,
+              autocorrect: false,
               decoration: InputDecoration(
-                hintText: 'example@email.com',
+                hintText: 'username',
                 hintStyle: TextStyle(color: Colors.grey[400]),
                 filled: true,
                 fillColor: Colors.grey[50],
+                prefixIcon: Icon(Icons.person_outline, color: Colors.grey[600]),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -201,15 +243,11 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
-                  return 'ກະລຸນາໃສ່ອີເມລ';
-                }
-                if (!value.contains('@')) {
-                  return 'ກະລຸນາໃສ່ອີເມລທີ່ຖືກຕ້ອງ';
+                  return 'ກະລຸນາໃສ່ຊື່ຜູ້ໃຊ້';
                 }
                 return null;
               },
             ),
-
             const SizedBox(height: 24),
 
             // Password Field
@@ -230,6 +268,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 hintStyle: TextStyle(color: Colors.grey[400]),
                 filled: true,
                 fillColor: Colors.grey[50],
+                prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[600]),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -271,12 +310,38 @@ class _LoginScreenState extends State<LoginScreen> {
                 if (value == null || value.isEmpty) {
                   return 'ກະລຸນາໃສ່ລະຫັດຜ່ານ';
                 }
-                if (value.length < 6) {
-                  return 'ລະຫັດຜ່ານຕ້ອງມີຢ່າງໜ້ອຍ 6 ຕົວອັກສອນ';
-                }
                 return null;
               },
             ),
+
+            // Error Message
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red[200]!),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.red,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: const TextStyle(color: Colors.red, fontSize: 14),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
 
             const SizedBox(height: 12),
 
@@ -285,10 +350,9 @@ class _LoginScreenState extends State<LoginScreen> {
               alignment: Alignment.centerRight,
               child: TextButton(
                 onPressed: () {
-                  // TODO: Implement forgot password
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(const SnackBar(content: Text('ລືມລະຫັດຜ່ານ')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('ກະລຸນາຕິດຕໍ່ຜູ້ດູແລລະບົບ')),
+                  );
                 },
                 child: const Text(
                   'ລືມລະຫັດຜ່ານ?',
@@ -336,7 +400,19 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
 
-            const SizedBox(height: 40),
+            const SizedBox(height: 24),
+
+            // Version Info
+            FutureBuilder<String>(
+              future: _appConfig.getAppVersion(),
+              builder: (context, snapshot) {
+                return Text(
+                  'ເວີຊັນ: ${snapshot.data ?? '1.0.0'}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -344,12 +420,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// Custom Painter for Logo Pattern Background
 class LogoPatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    // You can draw your logo pattern here
-    // For now, using a simple geometric pattern
     final paint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
@@ -357,7 +430,6 @@ class LogoPatternPainter extends CustomPainter {
 
     const spacing = 100.0;
 
-    // Draw diagonal lines pattern
     for (double i = -size.height; i < size.width + size.height; i += spacing) {
       canvas.drawLine(
         Offset(i, 0),
@@ -366,7 +438,6 @@ class LogoPatternPainter extends CustomPainter {
       );
     }
 
-    // Draw circles pattern
     final circlePaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke

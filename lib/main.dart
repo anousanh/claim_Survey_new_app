@@ -1,10 +1,13 @@
-// lib/main.dart
+// lib/main.dart - UPDATED VERSION
+import 'package:claim_survey_app/services/api/auth_service.dart';
 import 'package:claim_survey_app/services/background_location_service.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'model/task_model.dart';
+// Add these imports for login functionality
+import 'screen/login/login_screen.dart';
 import 'screen/report/report_screen.dart';
 import 'screen/task_list_screen.dart';
 import 'screen/user_profile_screen.dart';
@@ -38,7 +41,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/// Splash screen to handle first-time permission request
+/// Splash screen to handle first-time permission request and check login
 class SplashPermissionScreen extends StatefulWidget {
   const SplashPermissionScreen({super.key});
 
@@ -47,6 +50,8 @@ class SplashPermissionScreen extends StatefulWidget {
 }
 
 class _SplashPermissionScreenState extends State<SplashPermissionScreen> {
+  final AuthService _authService = AuthService();
+
   @override
   void initState() {
     super.initState();
@@ -74,11 +79,21 @@ class _SplashPermissionScreenState extends State<SplashPermissionScreen> {
     // Add delay for splash effect
     await Future.delayed(const Duration(seconds: 2));
 
-    // Navigate to main screen
+    // Check if user is logged in
     if (mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const MainScreen()),
-      );
+      final isLoggedIn = await _authService.isLoggedIn();
+
+      if (isLoggedIn) {
+        // User is logged in, go to main screen
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const MainScreen()),
+        );
+      } else {
+        // User is not logged in, go to login screen
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        );
+      }
     }
   }
 
@@ -121,7 +136,7 @@ class _SplashPermissionScreenState extends State<SplashPermissionScreen> {
                 children: [
                   Icon(Icons.notifications, color: Color(0xFF0099FF), size: 20),
                   SizedBox(width: 8),
-                  Expanded(child: Text('ແຈ້ງເຕືອນລູກຄ້າເມື່ອທ່ານຢູ່ໃກ້ໆ')),
+                  Expanded(child: Text('ແຈ້ງເຕືອນລູກຄ້າເມື່ອທ່ານຢູ່ໃກ້')),
                 ],
               ),
             ],
@@ -176,7 +191,7 @@ class _SplashPermissionScreenState extends State<SplashPermissionScreen> {
             ),
             const SizedBox(height: 10),
             const Text(
-              'ກຳລັງກຽມພ້ອມ...',
+              'ກຳລັງກວມພ້ອມ...',
               style: TextStyle(fontSize: 16, color: Colors.white70),
             ),
             const SizedBox(height: 30),
@@ -188,7 +203,7 @@ class _SplashPermissionScreenState extends State<SplashPermissionScreen> {
   }
 }
 
-// Main Screen with Bottom Navigation
+// Main Screen with Bottom Navigation - YOUR EXISTING VERSION
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
@@ -208,7 +223,7 @@ class _MainScreenState extends State<MainScreen> {
 
   final List<String> _titles = [
     'ແກ້ໄຂອຸບັດຕິເຫດ',
-    'ແກ້ໄຂຄະດີເພີ່ມເຕີ່ມ',
+    'ແກ້ໄຂຄະດີເພີ່ມເຕີມ',
     'ລາຍງານ',
     'ຂໍ້ມູນຜູ້ໃຊ້',
   ];
