@@ -1,18 +1,23 @@
-class APIResponse {
+import 'dart:convert';
+
+/// API Response wrapper class
+/// Handles all API responses with consistent structure
+class ApiResponse {
   final int status;
   final String message;
   final String error;
   final Map<String, dynamic>? data;
 
-  APIResponse({
+  ApiResponse({
     required this.status,
     required this.message,
     required this.error,
     this.data,
   });
 
-  factory APIResponse.fromJson(Map<String, dynamic> json) {
-    return APIResponse(
+  /// Create ApiResponse from JSON
+  factory ApiResponse.fromJson(Map<String, dynamic> json) {
+    return ApiResponse(
       status: json['status'] ?? 0,
       message: json['message'] ?? '',
       error: json['error'] ?? '',
@@ -22,6 +27,21 @@ class APIResponse {
     );
   }
 
+  /// Convert to JSON
+  Map<String, dynamic> toJson() {
+    return {'status': status, 'message': message, 'error': error, 'data': data};
+  }
+
+  /// Check if request was successful
+  bool get isSuccess => status == 200;
+
+  /// Check if request failed
+  bool get isFailure => status != 200;
+
+  /// Get raw data object
+  Map<String, dynamic>? get rawData => data;
+
+  /// Get single data object by key and convert to model
   T? getData<T>(String key, T Function(Map<String, dynamic>) fromJson) {
     try {
       if (data != null && data!.containsKey(key)) {
@@ -31,11 +51,12 @@ class APIResponse {
         }
       }
     } catch (e) {
-      print('Error getting data for key $key: $e');
+      print('❌ Error getting data for key $key: $e');
     }
     return null;
   }
 
+  /// Get array of data objects by key and convert to list of models
   List<T> getDataArray<T>(
     String key,
     T Function(Map<String, dynamic>) fromJson,
@@ -53,45 +74,119 @@ class APIResponse {
         }
       }
     } catch (e) {
-      print('Error getting data array for key $key: $e');
+      print('❌ Error getting data array for key $key: $e');
     }
     return objects;
   }
 
-  int getIntData(String key) {
+  /// Get integer value from data
+  int getIntData(String key, {int defaultValue = 0}) {
     try {
-      return data?[key] ?? 0;
+      if (data != null && data!.containsKey(key)) {
+        final value = data![key];
+        if (value is int) return value;
+        if (value is String) return int.tryParse(value) ?? defaultValue;
+        if (value is double) return value.toInt();
+      }
     } catch (e) {
-      return 0;
+      print('❌ Error getting int data for key $key: $e');
     }
+    return defaultValue;
   }
 
-  double getDoubleData(String key) {
+  /// Get double value from data
+  double getDoubleData(String key, {double defaultValue = 0.0}) {
     try {
-      return (data?[key] ?? 0).toDouble();
+      if (data != null && data!.containsKey(key)) {
+        final value = data![key];
+        if (value is double) return value;
+        if (value is int) return value.toDouble();
+        if (value is String) return double.tryParse(value) ?? defaultValue;
+      }
     } catch (e) {
-      return 0.0;
+      print('❌ Error getting double data for key $key: $e');
     }
+    return defaultValue;
   }
 
-  String getStringData(String key) {
+  /// Get string value from data
+  String getStringData(String key, {String defaultValue = ''}) {
     try {
-      return data?[key]?.toString() ?? '';
+      if (data != null && data!.containsKey(key)) {
+        return data![key]?.toString() ?? defaultValue;
+      }
     } catch (e) {
-      return '';
+      print('❌ Error getting string data for key $key: $e');
     }
+    return defaultValue;
   }
 
-  bool getBooleanData(String key) {
+  /// Get boolean value from data
+  bool getBooleanData(String key, {bool defaultValue = false}) {
     try {
-      return data?[key] ?? false;
+      if (data != null && data!.containsKey(key)) {
+        final value = data![key];
+        if (value is bool) return value;
+        if (value is int) return value != 0;
+        if (value is String) {
+          return value.toLowerCase() == 'true' || value == '1';
+        }
+      }
     } catch (e) {
-      return false;
+      print('❌ Error getting boolean data for key $key: $e');
     }
+    return defaultValue;
+  }
+
+  /// Get long value from data
+  int getLongData(String key, {int defaultValue = 0}) {
+    return getIntData(key, defaultValue: defaultValue);
+  }
+
+  /// Check if data contains a key
+  bool hasData(String key) {
+    return data != null && data!.containsKey(key);
+  }
+
+  /// Get nested data object
+  Map<String, dynamic>? getNestedData(String key) {
+    try {
+      if (data != null && data!.containsKey(key)) {
+        final value = data![key];
+        if (value is Map<String, dynamic>) {
+          return value;
+        }
+      }
+    } catch (e) {
+      print('❌ Error getting nested data for key $key: $e');
+    }
+    return null;
   }
 
   @override
   String toString() {
-    return 'APIResponse{status: $status, message: $message, error: $error, data: $data}';
+    return 'ApiResponse{status: $status, message: $message, error: $error, hasData: ${data != null}}';
+  }
+
+  /// Create a success response
+  factory ApiResponse.success({
+    String message = 'Success',
+    Map<String, dynamic>? data,
+  }) {
+    return ApiResponse(status: 200, message: message, error: '', data: data);
+  }
+
+  /// Create an error response
+  factory ApiResponse.failure({
+    int status = 0,
+    String message = 'Request failed',
+    String error = '',
+  }) {
+    return ApiResponse(
+      status: status,
+      message: message,
+      error: error,
+      data: null,
+    );
   }
 }

@@ -97,8 +97,8 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
         throw Exception('Invalid claim number');
       }
 
-      final response = await _apiService.getMotorClaimTask(
-        claimNo: claimNo,
+      final response = await _apiService.getTaskList(
+        status: 'claimNo',
         taskType: widget.task.taskType ?? 'SOLVING',
       );
 
@@ -282,7 +282,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     try {
       final claimNo = int.tryParse(_task.policyNumber);
       if (claimNo != null) {
-        final response = await _apiService.arrivedAtSite(
+        final response = await _apiService.(
           claimNo: claimNo,
           latitude: position.latitude,
           longitude: position.longitude,

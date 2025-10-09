@@ -1,12 +1,11 @@
 import 'dart:convert';
-
-import 'package:claim_survey_app/model/User_account.dart';
 import 'package:claim_survey_app/model/api_response.dart';
+import 'package:claim_survey_app/model/user_account.dart';
+import 'package:claim_survey_app/services/api/api_service.dart';
 import 'package:claim_survey_app/services/encryption_service.dart';
 import 'package:claim_survey_app/utils/app_config.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
-import 'api_service.dart';
 
 class AuthService {
   static const String _userDataKey = 'user_data';
@@ -20,11 +19,7 @@ class AuthService {
     try {
       final params = {'username': username, 'password': password};
 
-      final APIResponse response = await _apiService.postRequest(
-        'login',
-        params,
-        includeToken: false,
-      );
+      final ApiResponse response = await _apiService.login(username, password);
 
       if (response.status == 200) {
         final user = response.getData<UserAccount>(
