@@ -30,6 +30,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
   bool _isLoading = false;
   bool _isCheckedIn = false;
   bool _isNavigating = false;
+  bool _hasArrived = false; // Track arrival status
 
   Position? _currentPosition;
   double? _distanceInKm;
@@ -92,15 +93,12 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     });
 
     try {
-      final claimNo = int.tryParse(widget.task.policyNumber);
+      final claimNo = int.tryParse(widget.task.claimNumber);
       if (claimNo == null) {
         throw Exception('Invalid claim number');
       }
 
-      final response = await _apiService.getTaskList(
-        status: 'claimNo',
-        taskType: widget.task.taskType ?? 'SOLVING',
-      );
+      final response = await _apiService.getMotorClaimTask(claimNo);
 
       if (response.isSuccess) {
         // Parse activity steps
@@ -191,7 +189,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     });
 
     try {
-      final taskNo = int.tryParse(_task.policyNumber);
+      final taskNo = int.tryParse(_task.claimNumber);
       if (taskNo == null) throw Exception('Invalid task number');
 
       final response = await _apiService.taskResponse(
@@ -222,7 +220,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     });
 
     try {
-      final taskNo = int.tryParse(_task.policyNumber);
+      final taskNo = int.tryParse(_task.claimNumber);
       if (taskNo == null) throw Exception('Invalid task number');
 
       final response = await _apiService.taskResponse(
@@ -239,6 +237,94 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
           'ບໍ່ສາມາດປະຕິເສດວຽກໄດ້: ${response.message}',
           isError: true,
         );
+      }
+    } catch (e) {
+      _showMessage('ເກີດຂໍ້ຜິດພາດ: $e', isError: true);
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  // arrive on site
+  // Handle Arrive On Site
+  Future<void> _handleArriveOnSite() async {
+    if (_currentPosition == null) {
+      _showMessage('ບໍ່ສາມາດເອົາສະຖານທີ່ປັດຈຸບັນໄດ້', isError: true);
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _statusMessage = 'ກຳລັງບັນທຶກການເຂົ້າເຮັດວຽກ...';
+    });
+
+    try {
+      final claimNo = int.tryParse(_task.claimNumber);
+      if (claimNo == null) {
+        throw Exception('Invalid claim number');
+      }
+
+      // Get current position for accurate arrival location
+      Position? arrivalPosition = await LocationService.getCurrentLocation();
+      if (arrivalPosition == null) {
+        arrivalPosition = _currentPosition!;
+      }
+
+      // Calculate current distance to destination
+      double currentDistance = LocationService.calculateDistance(
+        _task.lat!,
+        _task.lng!,
+        arrivalPosition.latitude,
+        arrivalPosition.longitude,
+      );
+
+      // Send arrival confirmation to API
+      final response = await _apiService.arriveResponse(
+        taskNo: claimNo,
+        isArrived: true,
+        remark: 'Arrived at site',
+        mapLat: arrivalPosition.latitude,
+        mapLng: arrivalPosition.longitude,
+        distance: currentDistance,
+      );
+
+      if (response.isSuccess) {
+        setState(() {
+          _hasArrived = true;
+          _isNavigating = false;
+          _statusMessage = 'ບັນທຶກການເຂົ້າເຮັດວຽກສຳເລັດ!';
+          _currentPosition = arrivalPosition;
+        });
+
+        // Stop navigation if active
+        if (_isNavigating) {
+          _stopNavigation();
+        }
+
+        _activitySteps.add(
+          ActivityStep(
+            date: DateTime.now(),
+            description:
+                'ເຂົ້າເຮັດວຽກແລ້ວ (ໄລຍະຫ່າງ: ${currentDistance.toStringAsFixed(2)} ກມ)',
+            icon: Icons.flag,
+          ),
+        );
+
+        _showMessage('ບັນທຶກການເຂົ້າເຮັດວຽກສຳເລັດ!', isError: false);
+
+        // Save to local database
+        await DatabaseService.saveCheckIn(
+          taskId: _task.claimNumber,
+          position: arrivalPosition,
+          distance: currentDistance,
+        );
+
+        // Reload task data to get updated status
+        await _loadTaskFromAPI();
+      } else {
+        _showMessage('ບໍ່ສາມາດບັນທຶກໄດ້: ${response.message}', isError: true);
       }
     } catch (e) {
       _showMessage('ເກີດຂໍ້ຜິດພາດ: $e', isError: true);
@@ -280,14 +366,12 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
 
     // Send to API
     try {
-      final claimNo = int.tryParse(_task.policyNumber);
+      final claimNo = int.tryParse(_task.claimNumber);
       if (claimNo != null) {
-        final response = await _apiService.(
-          claimNo: claimNo,
-          latitude: position.latitude,
-          longitude: position.longitude,
-          distance: distance,
-          isArrived: true,
+        final response = await _apiService.taskResponse(
+          taskNo: claimNo,
+          isAccepted: true,
+          remark: 'Check-in at site',
         );
 
         if (!response.isSuccess) {
@@ -325,7 +409,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     });
 
     await DatabaseService.saveCheckIn(
-      taskId: _task.policyNumber,
+      taskId: _task.claimNumber,
       position: position,
       distance: distance,
     );
@@ -406,7 +490,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     });
 
     await BackgroundLocationService.startTracking(
-      taskId: _task.policyNumber,
+      taskId: _task.claimNumber,
       taskTitle: _task.title,
     );
 
@@ -507,7 +591,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     }
 
     DatabaseService.saveLocationTracking(
-      taskId: _task.policyNumber,
+      taskId: _task.claimNumber,
       position: position,
       distanceToDestination: distanceToDestination,
       status: _isNavigating ? 'navigating' : 'tracking',
@@ -538,11 +622,11 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     try {
       // If completing task, call finish API
       if (newStatus == TaskStatus.completed) {
-        final claimNo = int.tryParse(_task.policyNumber);
+        final claimNo = int.tryParse(_task.claimNumber);
         final taskNo = _task.taskNo ?? claimNo;
 
         if (claimNo != null && taskNo != null) {
-          final response = await _apiService.finishMotorTask(
+          final response = await _apiService.mtFinishTask(
             claimNo: claimNo,
             taskNo: taskNo,
             taskType: _task.taskType ?? 'SOLVING',
@@ -571,7 +655,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       );
 
       await DatabaseService.updateTaskStatus(
-        taskId: _task.policyNumber,
+        taskId: _task.claimNumber,
         status: newStatus.toString(),
         position: _currentPosition,
       );
@@ -827,13 +911,19 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                   _buildActivityTimeline(),
                 ]),
 
-              // Action Buttons Grid
-              if (_isCheckedIn && _currentStatus == TaskStatus.inProgress)
-                _buildActionButtonsGrid(),
-
-              // Navigation Button
-              if (_isCheckedIn && _task.lat != null && !_isNavigating)
+              // Navigation Button - Show only when checked in but not arrived
+              if (_isCheckedIn &&
+                  _task.lat != null &&
+                  !_isNavigating &&
+                  !_hasArrived)
                 _buildNavigationButton(),
+
+              // Arrive on Site Button - Show after check-in but before arrival
+              if (_isCheckedIn && !_hasArrived) _buildArriveOnSiteButton(),
+
+              // Action Buttons Grid - Show only after arrival
+              if (_hasArrived && _currentStatus == TaskStatus.inProgress)
+                _buildActionButtonsGrid(),
 
               // Status Change Buttons
               _buildActionButtons(),
@@ -1160,7 +1250,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'ເລກທີກະທຳຜິດ: ${_task.policyNumber}',
+            'ເລກທີກະທຳຜິດ: ${_task.claimNumber}',
             style: TextStyle(fontSize: 16, color: Colors.grey[600]),
           ),
           const SizedBox(height: 16),
@@ -1282,6 +1372,97 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                       ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildArriveOnSiteButton() {
+    // Calculate current distance if position is available
+    double? currentDistance;
+    if (_currentPosition != null && _task.lat != null && _task.lng != null) {
+      currentDistance = LocationService.calculateDistance(
+        _task.lat!,
+        _task.lng!,
+        _currentPosition!.latitude,
+        _currentPosition!.longitude,
+      );
+    }
+
+    // Show button when within reasonable distance (e.g., 100 meters) or after navigation
+    bool canMarkArrival =
+        currentDistance != null && currentDistance < 0.1; // 100 meters in km
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          if (currentDistance != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: canMarkArrival ? Colors.green[50] : Colors.orange[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: canMarkArrival ? Colors.green : Colors.orange,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    canMarkArrival ? Icons.check_circle : Icons.info,
+                    color: canMarkArrival ? Colors.green : Colors.orange,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      canMarkArrival
+                          ? 'ທ່ານໃກ້ເຖິງຈຸດໝາຍແລ້ວ'
+                          : 'ໄລຍະຫ່າງ: ${currentDistance.toStringAsFixed(2)} ກມ',
+                      style: TextStyle(
+                        color: canMarkArrival
+                            ? Colors.green[900]
+                            : Colors.orange[900],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isLoading ? null : _handleArriveOnSite,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                disabledBackgroundColor: Colors.grey[300],
+              ),
+              icon: _isLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(Icons.flag, color: Colors.white),
+              label: Text(
+                _isLoading ? 'ກຳລັງບັນທຶກ...' : 'ເຂົ້າເຮັດວຽກ',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );

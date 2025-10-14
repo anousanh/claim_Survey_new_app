@@ -55,7 +55,7 @@ class _LoginScreenState extends State<LoginScreen> {
       String password = _passwordController.text;
 
       // Handle environment prefixes
-      if (username.startsWith('test.') || username.startsWith('pentest')) {
+      if (username.startsWith('test.') || username.startsWith('julee')) {
         username = username.replaceFirst('test.', '');
         _appConfig.changeDBMode(DBMode.test);
       } else if (username.startsWith('dev.')) {

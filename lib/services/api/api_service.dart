@@ -1,22 +1,19 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart';
+
 import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
+
 import '../../model/api_response.dart';
 import '../../utils/app_config.dart';
 import '../encryption_service.dart';
 
-/// Main API Service for all backend communication
-/// Handles authentication, request signing, and data encryption
-/// Matches C# API endpoints exactly
 class ApiService {
   final AppConfig _appConfig = AppConfig();
 
   // API Key from Android strings.xml
   static const String _apiKey = '8D494B40136EC90739D3959B52BE1864C245AGL';
-
-  // ==================== AUTHENTICATION ====================
 
   /// Login user with username and password
   /// C# endpoint: action = "login"
@@ -76,6 +73,7 @@ class ApiService {
 
   /// Get motor claim task by claim number
   /// C# endpoint: action = "getMotorClaimTask"
+  /// For find task solving (claim), use claimNo
   Future<ApiResponse> getMotorClaimTask(int claimNo) async {
     try {
       final params = {'claimNo': claimNo};
@@ -97,6 +95,7 @@ class ApiService {
 
   /// Get motor claim detail (supports both Solving and Resolving)
   /// C# endpoint: action = "getMotorClaim"
+  /// for find list of resolving tasks, use taskType = "Resolving"
   Future<ApiResponse> getMotorClaim({
     required String taskType,
     int taskNo = 0,
@@ -123,7 +122,7 @@ class ApiService {
   }
 
   /// Accept or reject task
-  /// C# endpoint: action = "taskResponse"
+  /// C# endpoint: action = "taskResponse" //  ຮັບວຽກ
   Future<ApiResponse> taskResponse({
     required int taskNo,
     required bool isAccepted,
@@ -148,7 +147,7 @@ class ApiService {
   }
 
   /// Mark task as arrived or not arrived
-  /// C# endpoint: action = "arriveResponse"
+  /// C# endpoint: action = "arriveResponse". // ມາເຖິງສະຖານທີ່
   Future<ApiResponse> arriveResponse({
     required int taskNo,
     required bool isArrived,
@@ -1056,6 +1055,7 @@ class ApiService {
   Future<Map<String, String>?> _getUserToken() async {
     try {
       const storage = FlutterSecureStorage();
+      print(storage.read(key: 'user_data'));
       final encrypted = await storage.read(key: 'user_data');
 
       if (encrypted != null && encrypted.isNotEmpty) {

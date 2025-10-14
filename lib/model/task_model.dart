@@ -5,7 +5,7 @@ enum TaskStatus { newTask, inProgress, completed, cancelled }
 enum TaskCategory { accident, additional }
 
 class Task {
-  final String policyNumber;
+  final String claimNumber;
   final String title;
   final String customerName;
   final String location;
@@ -46,7 +46,7 @@ class Task {
   final bool? btnPolice;
 
   Task({
-    required this.policyNumber,
+    required this.claimNumber,
     required this.title,
     required this.customerName,
     required this.location,
@@ -86,7 +86,7 @@ class Task {
   /// Create Task from API JSON response
   factory Task.fromJson(Map<String, dynamic> json) {
     return Task(
-      policyNumber:
+      claimNumber:
           json['claimNo']?.toString() ?? json['policyNumber']?.toString() ?? '',
       title: json['title'] ?? 'ຄະດີອຸບັດຕິເຫດ',
       customerName: json['declarer'] ?? json['customerName'] ?? '',
@@ -130,7 +130,7 @@ class Task {
   /// Convert Task to JSON
   Map<String, dynamic> toJson() {
     return {
-      'policyNumber': policyNumber,
+      'claimNumber': claimNumber,
       'title': title,
       'customerName': customerName,
       'location': location,
@@ -288,7 +288,7 @@ class Task {
     String? taskType,
   }) {
     return Task(
-      policyNumber: policyNumber ?? this.policyNumber,
+      claimNumber: claimNumber,
       title: title ?? this.title,
       customerName: customerName ?? this.customerName,
       location: location ?? this.location,

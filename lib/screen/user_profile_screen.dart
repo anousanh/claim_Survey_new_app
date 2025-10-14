@@ -1,4 +1,6 @@
 // lib/screens/user_profile_screen.dart
+import 'package:claim_survey_app/screen/login/login_screen.dart';
+import 'package:claim_survey_app/services/api/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -14,6 +16,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   bool _locationEnabled = true;
   bool _darkMode = false;
   String _selectedLanguage = 'ລາວ';
+
+  // Add AuthService instance
+  final AuthService _authService = AuthService();
+  bool _isLoggingOut = false;
 
   @override
   Widget build(BuildContext context) {
@@ -151,7 +157,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 (value) {
                   setState(() => _notificationsEnabled = value);
                   if (value) {
-                    // TODO: Request notification permission
                     _requestNotificationPermission();
                   }
                 },
@@ -164,7 +169,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 (value) {
                   setState(() => _locationEnabled = value);
                   if (value) {
-                    // TODO: Request location permission
                     _requestLocationPermission();
                   }
                 },
@@ -199,10 +203,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   ),
                   SizedBox(height: 12),
                   _buildActionButton(
-                    'ອອກຈາກລະບົບ',
+                    _isLoggingOut ? 'ກຳລັງອອກຈາກລະບົບ...' : 'ອອກຈາກລະບົບ',
                     Icons.logout,
                     Colors.red,
-                    () => _showLogoutDialog(),
+                    _isLoggingOut ? null : () => _showLogoutDialog(),
                   ),
                 ],
               ),
@@ -422,7 +426,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     String text,
     IconData icon,
     Color color,
-    VoidCallback onPressed,
+    VoidCallback? onPressed,
   ) {
     return SizedBox(
       width: double.infinity,
@@ -439,7 +443,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: color, size: 20),
+            if (_isLoggingOut && text.contains('ກຳລັງ'))
+              Container(
+                width: 16,
+                height: 16,
+                margin: EdgeInsets.only(right: 8),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                ),
+              )
+            else
+              Icon(icon, color: color, size: 20),
             SizedBox(width: 8),
             Text(
               text,
@@ -590,32 +605,86 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
+  // Updated logout dialog with actual logout functionality
   void _showLogoutDialog() {
     showDialog(
       context: context,
+      barrierDismissible: !_isLoggingOut,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('ຢືນຢັນການອອກຈາກລະບົບ'),
-          content: Text('ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການອອກຈາກລະບົບ?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text('ຍົກເລີກ'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                // TODO: Navigate to login screen
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text('ອອກຈາກລະບົບສຳເລັດ')));
-              },
-              child: Text('ອອກຈາກລະບົບ', style: TextStyle(color: Colors.red)),
-            ),
-          ],
+        return WillPopScope(
+          onWillPop: () async => !_isLoggingOut,
+          child: AlertDialog(
+            title: Text('ຢືນຢັນການອອກຈາກລະບົບ'),
+            content: Text('ທ່ານແນ່ໃຈບໍ່ວ່າຕ້ອງການອອກຈາກລະບົບ?'),
+            actions: [
+              TextButton(
+                onPressed: _isLoggingOut
+                    ? null
+                    : () => Navigator.of(context).pop(),
+                child: Text('ຍົກເລີກ'),
+              ),
+              TextButton(
+                onPressed: _isLoggingOut ? null : () => _performLogout(),
+                child: _isLoggingOut
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+                        ),
+                      )
+                    : Text('ອອກຈາກລະບົບ', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
         );
       },
     );
+  }
+
+  // Actual logout function
+  Future<void> _performLogout() async {
+    setState(() {
+      _isLoggingOut = true;
+    });
+
+    try {
+      // Call the logout method from AuthService
+      await _authService.logout();
+
+      // Close the dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Navigate to login screen and remove all previous routes
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (context) =>
+                LoginScreen(), // Replace with your actual login screen
+          ),
+          (Route<dynamic> route) => false,
+        );
+      }
+    } catch (e) {
+      // Handle any errors during logout
+      setState(() {
+        _isLoggingOut = false;
+      });
+
+      if (mounted) {
+        Navigator.of(context).pop(); // Close dialog
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('ເກີດຂໍ້ຜິດພາດໃນການອອກຈາກລະບົບ: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _requestNotificationPermission() {
