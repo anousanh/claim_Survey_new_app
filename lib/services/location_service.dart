@@ -1,4 +1,5 @@
 // lib/services/location_service.dart
+import 'dart:io' show Platform;
 import 'package:geolocator/geolocator.dart';
 
 class LocationService {
@@ -27,6 +28,7 @@ class LocationService {
       return {
         'success': false,
         'message': 'ກະລຸນາອະນຸຍາດການເຂົ້າເຖິງສະຖານທີ່ໃນການຕັ້ງຄ່າ',
+        'openSettings': true, // Flag to open settings
       };
     }
 
@@ -74,15 +76,32 @@ class LocationService {
   }
 
   /// Get position stream for real-time tracking
+  /// This method is now iOS-aware and uses platform-specific settings
   static Stream<Position> getPositionStream({
     LocationAccuracy accuracy = LocationAccuracy.high,
     int distanceFilter = 10,
   }) {
-    return Geolocator.getPositionStream(
-      locationSettings: LocationSettings(
-        accuracy: accuracy,
-        distanceFilter: distanceFilter,
-      ),
-    );
+    // Use platform-specific settings
+    if (Platform.isIOS) {
+      return Geolocator.getPositionStream(
+        locationSettings: AppleSettings(
+          accuracy: accuracy,
+          activityType: ActivityType.automotiveNavigation,
+          distanceFilter: distanceFilter,
+          pauseLocationUpdatesAutomatically: false,
+          showBackgroundLocationIndicator: true,
+        ),
+      );
+    } else {
+      // Android settings (your original code)
+      return Geolocator.getPositionStream(
+        locationSettings: AndroidSettings(
+          accuracy: accuracy,
+          distanceFilter: distanceFilter,
+          forceLocationManager: false,
+          intervalDuration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
 }
