@@ -215,29 +215,36 @@ class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
 
   final List<Widget> _screens = [
+    // Solving Tab (Accidents)
     const TaskListScreen(category: TaskCategory.accident),
+
+    // Resolving Tab (Additional/Resolve tasks)
     const TaskListScreen(category: TaskCategory.additional),
+
+    // Report Tab
     const ReportScreen(),
+
+    // Profile Tab
     const UserProfileScreen(),
   ];
 
   final List<String> _titles = [
-    'ແກ້ໄຂອຸບັດຕິເຫດ',
-    'ແກ້ໄຂຄະດີເພີ່ມເຕີມ',
+    'Solving', // Changed from 'ແກ້ໄຂອຸບັດຕິເຫດ'
+    'Resolving', // Changed from 'ແກ້ໄຂຄະດີເພີ່ມເຕີມ'
     'ລາຍງານ',
     'ຂໍ້ມູນຜູ້ໃຊ້',
   ];
 
   final List<IconData> _icons = [
-    Icons.car_crash,
-    Icons.add_task,
-    Icons.bar_chart,
-    Icons.person,
+    Icons.construction, // Solving icon
+    Icons.request_page, // Resolving icon
+    Icons.bar_chart, // Report icon
+    Icons.person, // Profile icon
   ];
 
   final List<String> _labels = [
-    'ອຸບັດຕິເຫດ',
-    'ຄະດີເພີ່ມເຕີມ',
+    'Solving',
+    'Resolving',
     'ລາຍງານ',
     'ຂໍ້ມູນຜູ້ໃຊ້',
   ];
@@ -379,7 +386,7 @@ class _MainScreenState extends State<MainScreen> {
               ),
               _buildNotificationItem(
                 'ລະບົບ',
-                'ອັບເດດແອັບເວີຊັນໃໝ່ມີແລ້ວ',
+                'ອັບເດດແອັບເວີຊັ້ນໃໝ່ມີແລ້ວ',
                 '2 ຊົ່ວໂມງກ່ອນ',
                 Icons.system_update,
                 Colors.green,

@@ -1,8 +1,158 @@
-// lib/model/task_model.dart - Extended with API support
+// lib/models/task_model.dart
+// FINAL VERSION - Complete with no conflicts
+
+import 'package:flutter/material.dart';
+
+// ============================================================================
+// ENUMS
+// ============================================================================
 
 enum TaskStatus { newTask, inProgress, completed, cancelled }
 
 enum TaskCategory { accident, additional }
+
+enum CaseTab {
+  newCase('New Case'),
+  inProgress('In-Progress'),
+  history('History');
+
+  final String label;
+  const CaseTab(this.label);
+}
+
+// ============================================================================
+// STATUS MAPPER - For Case List Tabs
+// ============================================================================
+
+class StatusMapper {
+  /// Map Solving status code to tab
+  static CaseTab getSolvingTab(int statusCode) {
+    switch (statusCode) {
+      case 6:
+        return CaseTab.newCase; // New Case
+      case 7:
+        return CaseTab.inProgress; // On Going
+      case 8:
+        return CaseTab.history; // Finish
+      case 9:
+        return CaseTab.history; // Task-Rejected
+      case 10:
+        return CaseTab.inProgress; // Doc-Pending
+      case 11:
+        return CaseTab.inProgress; // Doc-Confirmed
+      case 12:
+        return CaseTab.inProgress; // Doc-Confirmed
+      case 13:
+        return CaseTab.inProgress; // Doc-Rejected
+      default:
+        return CaseTab.newCase;
+    }
+  }
+
+  /// Map Resolving status code to tab
+  static CaseTab getResolvingTab(int statusCode) {
+    switch (statusCode) {
+      case 17:
+        return CaseTab.newCase; // Request
+      case 18:
+        return CaseTab.inProgress; // Approved
+      case 19:
+        return CaseTab.history; // Rejected
+      case 20:
+        return CaseTab.history; // Finished
+      case 21:
+        return CaseTab.history; // Paid
+      default:
+        return CaseTab.newCase;
+    }
+  }
+
+  /// Get status display name
+  static String getStatusName(int statusCode, bool isResolving) {
+    if (isResolving) {
+      switch (statusCode) {
+        case 17:
+          return 'Request';
+        case 18:
+          return 'Approved';
+        case 19:
+          return 'Rejected';
+        case 20:
+          return 'Finished';
+        case 21:
+          return 'Paid';
+        default:
+          return 'Unknown';
+      }
+    } else {
+      switch (statusCode) {
+        case 6:
+          return 'New Case';
+        case 7:
+          return 'On Going';
+        case 8:
+          return 'Finish';
+        case 9:
+          return 'Task-Rejected';
+        case 10:
+          return 'Doc-Pending';
+        case 11:
+          return 'Doc-Confirmed';
+        case 12:
+          return 'Doc-Confirmed';
+        case 13:
+          return 'Doc-Rejected';
+        default:
+          return 'Unknown';
+      }
+    }
+  }
+
+  /// Get status color
+  static Color getStatusColor(int statusCode, bool isResolving) {
+    if (isResolving) {
+      switch (statusCode) {
+        case 17:
+          return const Color(0xFF2196F3); // Blue
+        case 18:
+          return const Color(0xFF4CAF50); // Green
+        case 19:
+          return const Color(0xFFF44336); // Red
+        case 20:
+          return const Color(0xFF009688); // Teal
+        case 21:
+          return const Color(0xFF9C27B0); // Purple
+        default:
+          return const Color(0xFF9E9E9E); // Grey
+      }
+    } else {
+      switch (statusCode) {
+        case 6:
+          return const Color(0xFF2196F3); // Blue
+        case 7:
+          return const Color(0xFFFF9800); // Orange
+        case 8:
+          return const Color(0xFF4CAF50); // Green
+        case 9:
+          return const Color(0xFFF44336); // Red
+        case 10:
+          return const Color(0xFFFFC107); // Amber
+        case 11:
+          return const Color(0xFF009688); // Teal
+        case 12:
+          return const Color(0xFF009688); // Teal
+        case 13:
+          return const Color(0xFFFF5722); // Deep Orange
+        default:
+          return const Color(0xFF9E9E9E); // Grey
+      }
+    }
+  }
+}
+
+// ============================================================================
+// TASK MODEL
+// ============================================================================
 
 class Task {
   final String claimNumber;
@@ -12,6 +162,7 @@ class Task {
   final String policyType;
   final DateTime assignedDate;
   final TaskStatus status;
+  final int statusCode; // Raw status code from API
   final TaskCategory category;
   final bool isUrgent;
   final String? description;
@@ -53,6 +204,7 @@ class Task {
     required this.policyType,
     required this.assignedDate,
     required this.status,
+    this.statusCode = 6,
     required this.category,
     this.isUrgent = false,
     this.description,
@@ -85,6 +237,8 @@ class Task {
 
   /// Create Task from API JSON response
   factory Task.fromJson(Map<String, dynamic> json) {
+    final rawStatus = json['taskStatus'] ?? json['status'] ?? 6;
+
     return Task(
       claimNumber:
           json['claimNo']?.toString() ?? json['policyNumber']?.toString() ?? '',
@@ -95,7 +249,8 @@ class Task {
         json['policyType'] ?? json['certificateType'] ?? 'car',
       ),
       assignedDate: _parseDate(json['assignedDate'] ?? json['accidentDate']),
-      status: _parseStatus(json['taskStatus'] ?? json['status'] ?? 6),
+      status: _parseStatus(rawStatus),
+      statusCode: rawStatus is int ? rawStatus : 6,
       category: _parseCategory(json['taskType'] ?? json['category']),
       isUrgent: json['vip'] == 1 || json['isUrgent'] == true,
       description: json['description'] ?? json['remark'],
@@ -137,6 +292,7 @@ class Task {
       'policyType': policyType,
       'assignedDate': assignedDate.toIso8601String(),
       'status': status.index,
+      'statusCode': statusCode,
       'category': category.index,
       'isUrgent': isUrgent,
       'description': description,
@@ -151,7 +307,6 @@ class Task {
     };
   }
 
-  /// Parse policy type from API
   static String _parsePolicyType(dynamic type) {
     if (type == null) return 'car';
     final typeStr = type.toString().toLowerCase();
@@ -167,20 +322,19 @@ class Task {
     return 'car';
   }
 
-  /// Parse status from API (Java uses integers)
   static TaskStatus _parseStatus(dynamic status) {
     if (status is int) {
       switch (status) {
         case 6:
-          return TaskStatus.newTask; // New/Assigned
+          return TaskStatus.newTask;
         case 7:
         case 8:
-          return TaskStatus.inProgress; // Accepted/In Progress
+          return TaskStatus.inProgress;
         case 20:
-          return TaskStatus.completed; // Finished
+          return TaskStatus.completed;
         case 9:
         case 10:
-          return TaskStatus.cancelled; // Rejected/Cancelled
+          return TaskStatus.cancelled;
         default:
           return TaskStatus.newTask;
       }
@@ -206,7 +360,6 @@ class Task {
     return TaskStatus.newTask;
   }
 
-  /// Parse category from API
   static TaskCategory _parseCategory(dynamic category) {
     if (category == null) return TaskCategory.accident;
 
@@ -217,7 +370,6 @@ class Task {
     return TaskCategory.accident;
   }
 
-  /// Parse date from API
   static DateTime _parseDate(dynamic date) {
     if (date == null) return DateTime.now();
 
@@ -225,9 +377,7 @@ class Task {
       try {
         return DateTime.parse(date);
       } catch (e) {
-        // Try parsing different formats
         try {
-          // Format: dd/MM/yyyy HH:mm
           final parts = date.split(' ');
           if (parts.length == 2) {
             final dateParts = parts[0].split('/');
@@ -251,7 +401,6 @@ class Task {
     return DateTime.now();
   }
 
-  /// Parse double from API
   static double? _parseDouble(dynamic value) {
     if (value == null) return null;
     if (value is double) return value;
@@ -266,7 +415,6 @@ class Task {
     return null;
   }
 
-  /// Create a copy with updated fields
   Task copyWith({
     String? policyNumber,
     String? title,
@@ -275,6 +423,7 @@ class Task {
     String? policyType,
     DateTime? assignedDate,
     TaskStatus? status,
+    int? statusCode,
     TaskCategory? category,
     bool? isUrgent,
     String? description,
@@ -295,6 +444,7 @@ class Task {
       policyType: policyType ?? this.policyType,
       assignedDate: assignedDate ?? this.assignedDate,
       status: status ?? this.status,
+      statusCode: statusCode ?? this.statusCode,
       category: category ?? this.category,
       isUrgent: isUrgent ?? this.isUrgent,
       description: description ?? this.description,
