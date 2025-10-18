@@ -1,5 +1,5 @@
 // lib/screens/task_list_screen.dart
-// Updated version using different API based on category
+// UPDATED VERSION - With conditional API calls based on category
 
 import 'package:flutter/material.dart';
 
@@ -47,13 +47,13 @@ class _TaskListScreenState extends State<TaskListScreen>
     });
 
     try {
-      // Use different API based on category
+      // Call different APIs based on category
       if (widget.category == TaskCategory.accident) {
-        // For Solving category, use the original API
-        await _loadSolvingTasks();
-      } else {
-        // For Resolving category, use the new API
-        await _loadResolvingTasks();
+        // For accident cases, call getMotorClaims
+        await _loadAccidentTasks();
+      } else if (widget.category == TaskCategory.additional) {
+        // For additional cases, call mtResolveTasks
+        await _loadAdditionalTasks();
       }
     } catch (e) {
       setState(() {
@@ -66,8 +66,8 @@ class _TaskListScreenState extends State<TaskListScreen>
     }
   }
 
-  // Load tasks for Solving category (original method)
-  Future<void> _loadSolvingTasks() async {
+  // Load accident tasks using getMotorClaims API
+  Future<void> _loadAccidentTasks() async {
     final response = await _apiService.getMotorClaims(search: '', statusId: 0);
 
     if (response.isSuccess) {
@@ -76,7 +76,7 @@ class _TaskListScreenState extends State<TaskListScreen>
         (json) => Task.fromJson(json),
       );
 
-      // Filter by category (accident/solving)
+      // Filter only accident category tasks
       final filteredTasks = tasks
           .where((task) => task.category == TaskCategory.accident)
           .toList();
@@ -91,69 +91,32 @@ class _TaskListScreenState extends State<TaskListScreen>
     }
   }
 
-  // Load tasks for Resolving category using MTResolveTasks
-  Future<void> _loadResolvingTasks() async {
-    // Option 1: If you have an API that fetches ALL resolve tasks
-    // You might need to check with your backend team for the correct endpoint
-    // For example: getMTResolveTasks() without claimNo parameter
-
-    // For now, using the existing getMotorClaims but filtering for resolving
-    final response = await _apiService.getMotorClaims(search: '', statusId: 0);
-
-    if (response.isSuccess) {
-      final tasks = response.getDataArray<Task>(
-        'claims',
-        (json) => Task.fromJson(json),
-      );
-
-      // Filter by category (insurance/resolving)
-      final filteredTasks = tasks
-          .where((task) => task.category == TaskCategory.additional)
-          .toList();
-
-      setState(() {
-        _tasks = filteredTasks;
-      });
-    } else {
-      setState(() {
-        _errorMessage = response.message;
-      });
-    }
-
-    // NOTE: If you need to use mtResolveTasks for individual claims,
-    // you would need to:
-    // 1. First get a list of claim numbers
-    // 2. Then call mtResolveTasks for each claim
-    // This would be inefficient and require multiple API calls
-  }
-
-  // Alternative: Load individual resolve task details
-  Future<void> _loadResolveTaskDetails(int claimNo) async {
+  // Load additional tasks using mtResolveTasks API
+  Future<void> _loadAdditionalTasks() async {
     try {
-      final response = await _apiService.mtResolveTasks(claimNo);
+      // Call mtResolveTasks with claimNo = 0 to get all resolve tasks
+      final response = await _apiService.mtResolveTasks(0);
 
       if (response.isSuccess) {
-        // Process the single task response
-        // You might need to adapt this based on the actual response structure
-        final taskData = response.data;
-        if (taskData != null) {
-          final task = Task.fromJson(taskData);
+        final resolveTasks = response.getDataArray<Task>(
+          'tasks', // Change this key if your API uses a different one
+          (json) => Task.fromJson(json),
+        );
 
-          // Update or add this task to your list
-          setState(() {
-            final index = _tasks.indexWhere(
-              (t) => t.claimNumber == claimNo.toString(),
-            );
-            if (index != -1) {
-              _tasks[index] = task;
-            } else {
-              _tasks.add(task);
-            }
-          });
-        }
+        final filteredTasks = resolveTasks
+            .where((task) => task.category == TaskCategory.additional)
+            .toList();
+
+        setState(() {
+          _tasks = filteredTasks;
+        });
+      } else {
+        setState(() {
+          _errorMessage = response.message;
+        });
       }
     } catch (e) {
-      debugPrint('Error loading resolve task details: $e');
+      throw e;
     }
   }
 
@@ -213,6 +176,11 @@ class _TaskListScreenState extends State<TaskListScreen>
       return _buildErrorState();
     }
 
+    // Different tab labels based on category
+    final tabLabels = widget.category == TaskCategory.accident
+        ? ['New Case', 'In-Progress', 'History']
+        : ['Request', 'Approved', 'Completed'];
+
     return Column(
       children: [
         // Sub-tabs with badge
@@ -228,7 +196,7 @@ class _TaskListScreenState extends State<TaskListScreen>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('New Case'),
+                    Text(tabLabels[0]),
                     if (_newCaseCount > 0) ...[
                       const SizedBox(width: 6),
                       _Badge(count: _newCaseCount),
@@ -236,8 +204,8 @@ class _TaskListScreenState extends State<TaskListScreen>
                   ],
                 ),
               ),
-              const Tab(text: 'In-Progress'),
-              const Tab(text: 'History'),
+              Tab(text: tabLabels[1]),
+              Tab(text: tabLabels[2]),
             ],
           ),
         ),
@@ -345,13 +313,6 @@ class _TaskListScreenState extends State<TaskListScreen>
   }
 
   void _navigateToDetail(Task task) async {
-    // If this is a resolving task and you need more details
-    if (widget.category == TaskCategory.additional &&
-        task.claimNumber != null) {
-      // Optionally load more details using mtResolveTasks
-      await _loadResolveTaskDetails(int.tryParse(task.claimNumber!) ?? 0);
-    }
-
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => CaseDetailScreen(task: task)),
@@ -363,7 +324,7 @@ class _TaskListScreenState extends State<TaskListScreen>
   }
 }
 
-// Keep all the existing _ModernTaskCard, _Badge classes unchanged
+// Keep all your existing widget classes below...
 class _ModernTaskCard extends StatelessWidget {
   final Task task;
   final VoidCallback onTap;

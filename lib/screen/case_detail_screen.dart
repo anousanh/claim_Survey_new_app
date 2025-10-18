@@ -1,5 +1,5 @@
 // lib/screens/case_detail_screen.dart
-// Step 5: Final refactored screen - ONLY UI rendering
+// Updated: Auto check-in on navigation + reordered layout
 
 import 'package:claim_survey_app/model/task_model.dart';
 import 'package:claim_survey_app/widgets/case_detail/navigation_card.dart';
@@ -11,18 +11,15 @@ import 'package:provider/provider.dart';
 import '../controllers/case_detail_controller.dart';
 import '../controllers/navigation_controller.dart';
 import '../services/location_service.dart';
-import '../widgets/case_detail/case_header.dart';
 import '../widgets/case_detail/action_buttons_grid.dart';
 import '../widgets/case_detail/activity_timeline.dart';
-import '../widgets/case_detail/customer_info_section.dart';
-
+import '../widgets/case_detail/case_header.dart';
 import '../widgets/case_detail/check_in_section.dart';
-import '../widgets/case_detail/status_action_buttons.dart';
+import '../widgets/case_detail/customer_info_section.dart';
 import '../widgets/case_detail/navigation_buttons.dart';
+import '../widgets/case_detail/status_action_buttons.dart';
 
-/// Refactored Case Detail Screen
-/// Reduced from 1400+ lines to ~350 lines
-/// Only handles UI rendering - all logic in controllers
+/// Refactored Case Detail Screen with Auto Check-in
 class CaseDetailScreen extends StatefulWidget {
   final Task task;
   const CaseDetailScreen({super.key, required this.task});
@@ -34,6 +31,7 @@ class CaseDetailScreen extends StatefulWidget {
 class _CaseDetailScreenState extends State<CaseDetailScreen> {
   late CaseDetailController _controller;
   NavigationController? _navController;
+  bool _isInitializing = true;
 
   @override
   void initState() {
@@ -43,19 +41,34 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     _controller = CaseDetailController(widget.task);
     print('🔵 2. Controller created');
 
-    _controller.loadTaskFromAPI();
-    print('🔵 3. Loading API');
+    _initializeScreen();
+  }
 
+  Future<void> _initializeScreen() async {
+    // Load task data from API
+    await _controller.loadTaskFromAPI();
+    print('🔵 3. API data loaded');
+
+    // Initialize navigation controller if coordinates exist
     if (widget.task.lat != null && widget.task.lng != null) {
       print(
         '🔵 4. Task has coordinates: ${widget.task.lat}, ${widget.task.lng}',
       );
-      _initNavController();
+      await _initNavController();
       print('🔵 5. NavController initialized');
+
+      // Auto check-in
+      await _performAutoCheckIn();
+    }
+
+    if (mounted) {
+      setState(() {
+        _isInitializing = false;
+      });
     }
   }
 
-  void _initNavController() async {
+  Future<void> _initNavController() async {
     print('🗺️ Creating NavController...');
     _navController = NavigationController(
       taskId: widget.task.claimNumber,
@@ -73,6 +86,67 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     }
   }
 
+  Future<void> _performAutoCheckIn() async {
+    print('🎯 Starting auto check-in...');
+
+    // Check location permission
+    final permResult = await LocationService.checkLocationPermission();
+    if (!permResult['success']) {
+      print('❌ Location permission denied');
+      if (mounted) {
+        if (permResult['openSettings'] == true) {
+          _showOpenSettingsDialog(permResult['message']);
+        } else {
+          _showMessage(permResult['message'], isError: true);
+        }
+      }
+      return;
+    }
+
+    // Get current location
+    final position = await LocationService.getCurrentLocation();
+    if (position == null) {
+      print('❌ Could not get current location');
+      if (mounted) {
+        _showMessage('ບໍ່ສາມາດເອົາສະຖານທີ່ປັດຈຸບັນໄດ້', isError: true);
+      }
+      return;
+    }
+
+    print('✅ Location obtained: ${position.latitude}, ${position.longitude}');
+
+    // Perform check-in
+    final success = await _controller.checkIn();
+    if (!mounted) return;
+
+    if (success) {
+      print('✅ Check-in successful');
+      _showMessage('ເຂົ້າເຮັດວຽກສຳເລັດ', isError: false);
+
+      // Get directions and draw route
+      if (_navController != null && _controller.currentPosition != null) {
+        final result = await _navController!.getDirectionsAndDrawRoute(
+          _controller.currentPosition!,
+        );
+
+        if (result != null) {
+          _controller.updatePositionInfo(
+            _controller.currentPosition!,
+            result['distance'],
+            result['duration'],
+          );
+        }
+
+        if (mounted) {
+          setState(() {});
+        }
+      }
+    } else {
+      print('❌ Check-in failed');
+      _showMessage('ບໍ່ສາມາດເຂົ້າເຮັດວຽກໄດ້', isError: true);
+    }
+  }
+
   @override
   void dispose() {
     _navController?.dispose();
@@ -82,6 +156,29 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isInitializing) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF0099FF),
+          title: const Text(
+            'ລາຍລະອຽດຄະດີ',
+            style: TextStyle(color: Colors.white),
+          ),
+          iconTheme: const IconThemeData(color: Colors.white),
+        ),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: Color(0xFF0099FF)),
+              SizedBox(height: 16),
+              Text('ກຳລັງໂຫຼດຂໍ້ມູນ...', style: TextStyle(fontSize: 16)),
+            ],
+          ),
+        ),
+      );
+    }
+
     return MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: _controller),
@@ -144,7 +241,14 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     return Scaffold(
       appBar: _buildAppBar(),
       body: RefreshIndicator(
-        onRefresh: () => controller.loadTaskFromAPI(),
+        onRefresh: () async {
+          await controller.loadTaskFromAPI();
+          if (navController != null && controller.currentPosition != null) {
+            await navController.getDirectionsAndDrawRoute(
+              controller.currentPosition!,
+            );
+          }
+        },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
@@ -160,20 +264,21 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                 currentStatus: controller.currentStatus,
               ),
 
-              // Check-in Section
-              if (navController != null && !controller.isCheckedIn)
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  child: CheckInButton(
-                    onPressed: () => _handleCheckIn(controller, navController),
-                    isLoading: controller.isLoading,
-                  ),
-                ),
-
+              // Check-in Info Section
               if (controller.isCheckedIn)
                 CheckInSection(controller: controller),
 
-              // Customer Info
+              // Status Action Buttons (MOVED UP - above customer info)
+              StatusActionButtons(
+                currentStatus: controller.currentStatus,
+                onAccept: () => _handleAccept(controller),
+                onReject: () => _showRejectDialog(controller),
+                onComplete: () => _showCompleteDialog(controller),
+                onCancel: () => _handleCancel(controller),
+                isLoading: controller.isLoading,
+              ),
+
+              // Customer Info (NOW BELOW status buttons)
               CustomerInfoSection(task: controller.task),
 
               // Description
@@ -197,31 +302,32 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                   onPressed: () => _startNavigation(controller, navController),
                 ),
 
-              // Arrive Button
-              if (controller.isCheckedIn && !controller.hasArrived)
+              // Arrive Button (only show if not arrived yet)
+              if (controller.isCheckedIn &&
+                  !controller.hasArrived &&
+                  controller.currentStatus == TaskStatus.inProgress)
                 ArriveButton(
                   onPressed: () => _handleArrive(controller),
                   currentDistance: _calculateCurrentDistance(controller),
                   isLoading: controller.isLoading,
                 ),
 
-              // Action Buttons Grid
-              if (controller.hasArrived &&
-                  controller.currentStatus == TaskStatus.inProgress)
+              // Action Buttons Grid (show after accepting task - status is inProgress)
+              if (controller.currentStatus == TaskStatus.inProgress) ...[
+                // Debug info
+                Builder(
+                  builder: (context) {
+                    debugPrint('🎨 Rendering Action Grid');
+                    debugPrint('🎨 Status: ${controller.currentStatus}');
+                    debugPrint('🎨 StatusCode: ${controller.task.statusCode}');
+                    return const SizedBox.shrink();
+                  },
+                ),
                 ActionButtonsGrid(
                   actionCompleted: controller.actionCompleted,
                   onActionPressed: controller.handleAction,
                 ),
-
-              // Status Action Buttons
-              StatusActionButtons(
-                currentStatus: controller.currentStatus,
-                onAccept: () => _handleAccept(controller),
-                onReject: () => _showRejectDialog(controller),
-                onComplete: () => _showCompleteDialog(controller),
-                onCancel: () => _handleCancel(controller),
-                isLoading: controller.isLoading,
-              ),
+              ],
 
               // Additional Actions
               _buildAdditionalActions(),
@@ -249,8 +355,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
               onPressed: () {
                 if (controller.isCheckedIn) {
                   _startNavigation(controller, navController);
-                } else {
-                  _handleCheckIn(controller, navController);
                 }
               },
               tooltip: 'ນຳທາງ',
@@ -279,7 +383,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
   }
 
   Widget _buildMap(NavigationController navController) {
-    // Add myLocationEnabled to show blue dot
     return GoogleMap(
       initialCameraPosition: CameraPosition(
         target: LatLng(
@@ -293,8 +396,8 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       onMapCreated: (GoogleMapController controller) {
         navController.setMapController(controller);
       },
-      myLocationEnabled: true, // Show blue dot for current location
-      myLocationButtonEnabled: true, // Show location button
+      myLocationEnabled: true,
+      myLocationButtonEnabled: true,
       zoomControlsEnabled: false,
       mapType: MapType.normal,
       compassEnabled: true,
@@ -339,63 +442,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     );
   }
 
-  Future<void> _handleCheckIn(
-    CaseDetailController controller,
-    NavigationController navController,
-  ) async {
-    // First check location permission
-    final permResult = await LocationService.checkLocationPermission();
-    if (!permResult['success']) {
-      if (!mounted) return;
-
-      if (permResult['openSettings'] == true) {
-        _showOpenSettingsDialog(permResult['message']);
-        return;
-      }
-
-      _showMessage(permResult['message'], isError: true);
-      return;
-    }
-
-    // Get current location
-    final position = await LocationService.getCurrentLocation();
-    if (position == null) {
-      if (!mounted) return;
-      _showMessage('ບໍ່ສາມາດເອົາສະຖານທີ່ປັດຈຸບັນໄດ້', isError: true);
-      return;
-    }
-
-    // Perform check-in
-    final success = await controller.checkIn();
-    if (!mounted) return;
-
-    if (success) {
-      _showMessage('ເຂົ້າເຮັດວຽກສຳເລັດ', isError: false);
-
-      // Get directions and draw route
-      if (controller.currentPosition != null) {
-        final result = await navController.getDirectionsAndDrawRoute(
-          controller.currentPosition!,
-        );
-
-        if (result != null) {
-          controller.updatePositionInfo(
-            controller.currentPosition!,
-            result['distance'],
-            result['duration'],
-          );
-        }
-
-        // Force map update
-        if (mounted) {
-          setState(() {});
-        }
-      }
-    } else {
-      _showMessage('ບໍ່ສາມາດເຂົ້າເຮັດວຽກໄດ້', isError: true);
-    }
-  }
-
   Future<void> _startNavigation(
     CaseDetailController controller,
     NavigationController navController,
@@ -416,12 +462,28 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
   }
 
   Future<void> _handleAccept(CaseDetailController controller) async {
+    debugPrint('🔵 Starting accept task...');
+    debugPrint(
+      '🔵 Current status before accept: ${controller.currentStatus} (statusCode: ${controller.task.statusCode})',
+    );
+
     final success = await controller.acceptTask();
     if (!mounted) return;
 
     if (success) {
+      debugPrint('✅ Accept success!');
+      debugPrint(
+        '✅ Current status after accept: ${controller.currentStatus} (statusCode: ${controller.task.statusCode})',
+      );
+
       _showMessage('ຮັບວຽກສຳເລັດ', isError: false);
+
+      // Force UI rebuild to show action grid
+      setState(() {});
+
+      debugPrint('✅ UI rebuilt');
     } else {
+      debugPrint('❌ Accept failed');
       _showMessage('ບໍ່ສາມາດຮັບວຽກໄດ້', isError: true);
     }
   }
@@ -492,7 +554,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       builder: (context) => AlertDialog(
         title: const Text('ສຳເລັດວຽກ'),
         content: const Text(
-          'ຕ້ອງການແຈ້ງສູນໃຫຍ່ວ່າທ່ານໄດ້ເຮັດວຽກໃນຄະດີນີ້ແລ້ວບໍ?',
+          'ຕ້ອງການແຈ້ງສູນໃຫ້ຫວ່າທ່ານໄດ້ເຮັດວຽກໃນຄະດີນີ້ແລ້ວບໍ?',
         ),
         actions: [
           TextButton(

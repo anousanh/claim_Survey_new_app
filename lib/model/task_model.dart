@@ -1,5 +1,5 @@
 // lib/models/task_model.dart
-// FINAL VERSION - Complete with no conflicts
+// UPDATED: Better status parsing for statusCode 10
 
 import 'package:flutter/material.dart';
 
@@ -186,6 +186,7 @@ class Task {
   final String? finishedTime;
   final int? taskNo;
   final String? taskType;
+  final String? customerEmail;
 
   // Button completion flags
   final bool? btnDocuments;
@@ -226,6 +227,7 @@ class Task {
     this.finishedTime,
     this.taskNo,
     this.taskType,
+    this.customerEmail,
     this.btnDocuments,
     this.btnCostEstimate,
     this.btnResponsibility,
@@ -272,6 +274,7 @@ class Task {
       finishedTime: json['finishedTime'],
       taskNo: json['taskNo'],
       taskType: json['taskType'],
+      customerEmail: json['customerEmail'],
       btnDocuments: json['btnDocuments'] ?? false,
       btnCostEstimate: json['btnCostEstimate'] ?? false,
       btnResponsibility: json['btnResponsibility'] ?? false,
@@ -326,15 +329,21 @@ class Task {
     if (status is int) {
       switch (status) {
         case 6:
-          return TaskStatus.newTask;
+          return TaskStatus.newTask; // New Case
         case 7:
-        case 8:
-          return TaskStatus.inProgress;
-        case 20:
-          return TaskStatus.completed;
-        case 9:
+          return TaskStatus.inProgress; // On Going
         case 10:
-          return TaskStatus.cancelled;
+          return TaskStatus.inProgress; // Doc-Pending (after accept)
+        case 11:
+          return TaskStatus.inProgress; // Doc-Confirmed
+        case 12:
+          return TaskStatus.inProgress; // Doc-Confirmed
+        case 13:
+          return TaskStatus.inProgress; // Doc-Rejected
+        case 8:
+          return TaskStatus.completed; // Finish
+        case 9:
+          return TaskStatus.cancelled; // Task-Rejected
         default:
           return TaskStatus.newTask;
       }
@@ -456,6 +465,10 @@ class Task {
       declarerMobile: declarerMobile ?? this.declarerMobile,
       taskNo: taskNo ?? this.taskNo,
       taskType: taskType ?? this.taskType,
+      responseTime: this.responseTime,
+      arriveTime: this.arriveTime,
+      uploadTime: this.uploadTime,
+      finishedTime: this.finishedTime,
       btnDocuments: this.btnDocuments,
       btnCostEstimate: this.btnCostEstimate,
       btnResponsibility: this.btnResponsibility,

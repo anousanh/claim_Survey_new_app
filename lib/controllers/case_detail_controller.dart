@@ -1,10 +1,8 @@
 // lib/controllers/case_detail_controller.dart
-// Step 2: Create controller for business logic
-// This handles all API calls, state management, and business operations
+// Updated: Using taskNo from model for taskResponse API
 
 import 'package:claim_survey_app/model/activity_step.dart';
 import 'package:claim_survey_app/model/task_model.dart';
-import 'package:claim_survey_app/screen/case_detail_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -58,9 +56,16 @@ class CaseDetailController extends ChangeNotifier {
 
     try {
       final claimNo = int.tryParse(_task.claimNumber);
-      if (claimNo == null) throw Exception('Invalid claim number');
+      if (claimNo == null) {
+        debugPrint('❌ Invalid claim number: ${_task.claimNumber}');
+        throw Exception('Invalid claim number');
+      }
 
+      debugPrint('📡 Calling getMotorClaimTask with claimNo: $claimNo');
       final response = await _apiService.getMotorClaimTask(claimNo);
+
+      debugPrint('📡 Response isSuccess: ${response.isSuccess}');
+      debugPrint('📡 Response message: ${response.message}');
 
       if (response.isSuccess) {
         final steps = response.getDataArray<ActivityStep>(
@@ -72,19 +77,44 @@ class CaseDetailController extends ChangeNotifier {
           (json) => Task.fromJson(json),
         );
 
+        debugPrint('📡 Tasks found: ${tasks.length}');
+
         if (tasks.isNotEmpty) {
           _task = tasks[0];
           _currentStatus = tasks[0].status;
+
+          // Load arrived status from API
+          _hasArrived =
+              tasks[0].arriveTime != null && tasks[0].arriveTime!.isNotEmpty;
+
+          // Load checked-in status from responseTime
+          _isCheckedIn =
+              tasks[0].responseTime != null &&
+              tasks[0].responseTime!.isNotEmpty;
+
+          debugPrint('📊 Task loaded:');
+          debugPrint('   - StatusCode: ${tasks[0].statusCode}');
+          debugPrint('   - Status: ${tasks[0].status}');
+          debugPrint('   - Arrived: $_hasArrived');
+          debugPrint('   - CheckedIn: $_isCheckedIn');
+          debugPrint('   - responseTime: ${tasks[0].responseTime}');
+          debugPrint('   - arriveTime: ${tasks[0].arriveTime}');
+
           _activitySteps.clear();
           _activitySteps.addAll(steps);
           _updateActionCompletionStatus(tasks[0]);
           notifyListeners();
+          return true;
+        } else {
+          debugPrint('❌ No tasks in response');
+          return false;
         }
-        return true;
+      } else {
+        debugPrint('❌ API call failed: ${response.message}');
+        return false;
       }
-      return false;
     } catch (e) {
-      debugPrint('Error loading task: $e');
+      debugPrint('❌ Error loading task: $e');
       return false;
     } finally {
       _setLoading(false);
@@ -101,13 +131,19 @@ class CaseDetailController extends ChangeNotifier {
     _actionCompleted['police'] = task.btnPolice ?? false;
   }
 
-  /// Handle Accept Task
+  /// Handle Accept Task - UPDATED to use taskNo from model
   Future<bool> acceptTask() async {
     _setLoading(true);
 
     try {
-      final taskNo = int.tryParse(_task.claimNumber);
-      if (taskNo == null) throw Exception('Invalid task number');
+      // Use taskNo from the model, fallback to claimNumber if taskNo is null
+      final taskNo = _task.taskNo ?? int.tryParse(_task.claimNumber);
+      if (taskNo == null) {
+        debugPrint('Error: taskNo is null');
+        return false;
+      }
+
+      debugPrint('🎯 Accepting task with taskNo: $taskNo');
 
       final response = await _apiService.taskResponse(
         taskNo: taskNo,
@@ -116,10 +152,34 @@ class CaseDetailController extends ChangeNotifier {
       );
 
       if (response.isSuccess) {
-        await loadTaskFromAPI();
+        debugPrint('✅ Task accepted successfully');
+
+        _addActivityStep('ຮັບວຽກສຳເລັດ', Icons.check_circle);
+
+        // IMPORTANT: Wait for server to update before reloading
+        debugPrint('⏳ Waiting 1 second for server to process...');
+        await Future.delayed(const Duration(seconds: 1));
+
+        debugPrint('🔄 Reloading task data...');
+        final reloadSuccess = await loadTaskFromAPI();
+
+        if (reloadSuccess) {
+          debugPrint('✅ Task data reloaded successfully');
+          debugPrint(
+            '✅ New status: $_currentStatus (statusCode: ${_task.statusCode})',
+          );
+        } else {
+          debugPrint('⚠️ Failed to reload task data');
+          debugPrint(
+            '⚠️ Current status remains: $_currentStatus (statusCode: ${_task.statusCode})',
+          );
+        }
+
         return true;
+      } else {
+        debugPrint('❌ Task acceptance failed: ${response.message}');
+        return false;
       }
-      return false;
     } catch (e) {
       debugPrint('Error accepting task: $e');
       return false;
@@ -128,13 +188,19 @@ class CaseDetailController extends ChangeNotifier {
     }
   }
 
-  /// Handle Reject Task
+  /// Handle Reject Task - UPDATED to use taskNo from model
   Future<bool> rejectTask(String remark) async {
     _setLoading(true);
 
     try {
-      final taskNo = int.tryParse(_task.claimNumber);
-      if (taskNo == null) throw Exception('Invalid task number');
+      // Use taskNo from the model, fallback to claimNumber if taskNo is null
+      final taskNo = _task.taskNo ?? int.tryParse(_task.claimNumber);
+      if (taskNo == null) {
+        debugPrint('Error: taskNo is null');
+        return false;
+      }
+
+      debugPrint('🎯 Rejecting task with taskNo: $taskNo');
 
       final response = await _apiService.taskResponse(
         taskNo: taskNo,
@@ -142,7 +208,16 @@ class CaseDetailController extends ChangeNotifier {
         remark: remark,
       );
 
-      return response.isSuccess;
+      if (response.isSuccess) {
+        debugPrint('✅ Task rejected successfully');
+
+        _addActivityStep('ປະຕິເສດວຽກ: $remark', Icons.cancel);
+
+        return true;
+      } else {
+        debugPrint('❌ Task rejection failed: ${response.message}');
+        return false;
+      }
     } catch (e) {
       debugPrint('Error rejecting task: $e');
       return false;
@@ -172,27 +247,13 @@ class CaseDetailController extends ChangeNotifier {
         position.longitude,
       );
 
-      // Send to API
-      try {
-        final claimNo = int.tryParse(_task.claimNumber);
-        if (claimNo != null) {
-          await _apiService.taskResponse(
-            taskNo: claimNo,
-            isAccepted: true,
-            remark: 'Check-in at site',
-          );
-        }
-      } catch (e) {
-        debugPrint('Error sending check-in: $e');
-      }
-
       _currentPosition = position;
       _distanceInKm = distance;
       _isCheckedIn = true;
-      _setStatusMessage('ຄຳນວນໄລຍຍະທາງສຳເລັດແລ້ວ!');
+      _setStatusMessage('ຄຳນວນໄລຍະທາງສຳເລັດແລ້ວ!');
 
       _addActivityStep(
-        'ຄຳນວນໄລຍຍະທາງແລ້ວ (${distance.toStringAsFixed(2)} ກມ)',
+        'ຄຳນວນໄລຍະທາງແລ້ວ (${distance.toStringAsFixed(2)} ກມ)',
         Icons.location_on,
       );
 
